@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 
 export interface SkillItem {
   type: 'text' | 'group'
@@ -8,29 +8,32 @@ export interface SkillItem {
   keywords?: string[]
 }
 
-const props = defineProps<{
-  resumeData: any
-  scale?: number
-  themeColor?: 'classic' | 'indigo' | 'slate' | 'emerald'
-  sectionVisibility?: Record<string, boolean>
-}>()
-
-const activeTheme = ref<'classic' | 'indigo' | 'slate' | 'emerald'>(
-  props.themeColor || props.resumeData?.theme_color || 'classic'
-)
-
-watch(
-  () => [props.themeColor, props.resumeData?.theme_color],
-  ([newColor, resumeColor]) => {
-    const target = newColor || resumeColor
-    if (target) {
-      activeTheme.value = target as any
-    }
+const props = withDefaults(
+  defineProps<{
+    resumeData: any
+    scale?: number
+    themeColor?: 'classic' | 'indigo' | 'slate' | 'emerald'
+    sectionVisibility?: Record<string, boolean>
+    editable?: boolean
+  }>(),
+  {
+    scale: 1,
+    themeColor: 'classic',
+    editable: true,
   }
 )
 
+const emit = defineEmits<{
+  (e: 'update:resume-data', data: any): void
+  (e: 'change', sectionKey?: string): void
+  (e: 'select-section', sectionKey: string): void
+  (e: 'regenerate-section', sectionKey: string): void
+}>()
+
+// 主题色彩方案
 const themeStyles = computed(() => {
-  switch (activeTheme.value) {
+  const color = props.themeColor || props.resumeData?.theme_color || 'classic'
+  switch (color) {
     case 'indigo':
       return {
         primary: '#4f46e5',
@@ -56,7 +59,7 @@ const themeStyles = computed(() => {
         primaryBorder: '#cbd5e1',
         textPrimary: '#1e293b',
         lineColor: '#334155',
-        bullet: '#64748b',
+        bullet: '#475569',
       }
     case 'classic':
     default:
@@ -79,6 +82,62 @@ function isSectionVisible(secKey: string): boolean {
 }
 
 const basics = computed(() => props.resumeData?.basics || {})
+
+// 基础信息已上板的所有标签（包括电话、邮箱、地点等常规字段与自定义字段）
+interface ActiveTagChip {
+  id: string
+  kind: 'standard' | 'custom'
+  key: string
+  label: string
+  value: string
+  icon: string
+}
+
+const activeHeaderChips = computed<ActiveTagChip[]>(() => {
+  const b = basics.value
+  const list: ActiveTagChip[] = []
+
+  // 1. 常规预置字段（只要有值就作为药丸展示并可交互）
+  if (b.phone) {
+    list.push({ id: 'std_phone', kind: 'standard', key: 'phone', label: '电话', value: b.phone, icon: '📞' })
+  }
+  if (b.email) {
+    list.push({ id: 'std_email', kind: 'standard', key: 'email', label: '邮箱', value: b.email, icon: '✉️' })
+  }
+  if (b.wechat) {
+    list.push({ id: 'std_wechat', kind: 'standard', key: 'wechat', label: '微信', value: b.wechat, icon: '💬' })
+  }
+  if (b.birthDate || b.birth) {
+    list.push({ id: 'std_birthDate', kind: 'standard', key: 'birthDate', label: '生日', value: b.birthDate || b.birth, icon: '🎂' })
+  }
+  if (b.location) {
+    list.push({ id: 'std_location', kind: 'standard', key: 'location', label: '城市', value: b.location, icon: '📍' })
+  }
+  if (b.github) {
+    list.push({ id: 'std_github', kind: 'standard', key: 'github', label: 'GitHub', value: b.github, icon: '🐙' })
+  }
+  if (b.blog) {
+    list.push({ id: 'std_blog', kind: 'standard', key: 'blog', label: '博客', value: b.blog, icon: '🌐' })
+  }
+
+  // 2. 自定义扩展字段
+  const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
+  cfs.forEach((cf: any, idx: number) => {
+    if (cf && (cf.label || cf.value)) {
+      list.push({
+        id: `cf_${idx}`,
+        kind: 'custom',
+        key: `custom_${idx}`,
+        label: cf.label || '自定义项',
+        value: cf.value || '',
+        icon: cf.icon || '🏷️',
+      })
+    }
+  })
+
+  return list
+})
+
 const projects = computed(() => {
   const arr = Array.isArray(props.resumeData?.projects) ? props.resumeData.projects : []
   return arr.filter((p: any) => p.visible !== false)
@@ -109,7 +168,7 @@ const parsedSkills = computed<SkillItem[]>(() => {
   const val = rawSkills.value
   if (!val) return []
   if (typeof val === 'string') {
-    return val.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({
+    return val.split('\n').map((s) => s.trim()).filter(Boolean).map((text) => ({
       type: 'text' as const,
       text,
     }))
@@ -140,7 +199,29 @@ const parsedSkills = computed<SkillItem[]>(() => {
   return []
 })
 
-// 智能高亮技能前缀 (例如 1. 双 Agent 工作流: 自动加粗冒号前)
+// 模块动态排序列表 (除 basics 抬头外)
+const defaultSectionOrder = ['education', 'skills', 'projects', 'experience', 'highlights']
+
+const dynamicSections = computed(() => {
+  const order: string[] = props.resumeData?.section_order || defaultSectionOrder
+  // 过滤掉 basics (抬头固定) 和隐藏/删除的模块
+  const list = order.filter((secId) => {
+    if (secId === 'basics') return false
+    return isSectionVisible(secId)
+  })
+
+  // 确保所有自定义模块也包含在其中
+  customSections.value.forEach((cs: any) => {
+    const customKey = `custom_${cs.id}`
+    if (!list.includes(customKey) && !list.includes(cs.id) && isSectionVisible(cs.id)) {
+      list.push(customKey)
+    }
+  })
+
+  return list
+})
+
+// 智能高亮技能前缀
 function formatSkillText(text: string) {
   if (!text) return ''
   const colonMatch = text.match(/^(\d+[\.、]\s*[^:：]+[:：]|[^:：]{2,15}[:：])([\s\S]*)$/)
@@ -150,14 +231,12 @@ function formatSkillText(text: string) {
   return text
 }
 
-// 辅助函数：格式化时间区间
 function formatDate(start?: string, end?: string) {
   if (!start && !end) return ''
   if (start && end) return `${start} - ${end}`
   return start || end || ''
 }
 
-// 辅助函数：格式化学历/专业/GPA
 function formatEduSub(edu: any) {
   const parts = []
   const major = edu.area || edu.major
@@ -169,384 +248,693 @@ function formatEduSub(edu: any) {
   return parts.join(' · ')
 }
 
+// 缩放
 const internalZoom = ref(0.68)
 const currentScale = computed(() => {
   return (props.scale ?? 1) * internalZoom.value
 })
+
+// =================== 拖放交互状态 ===================
+const isHeaderDraggingOver = ref(false)
+const draggingTagLabel = ref('')
+
+// 1. Header 接收标签拖入
+function handleHeaderDragOver(e: DragEvent) {
+  if (!props.editable) return
+  e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  isHeaderDraggingOver.value = true
+}
+
+function handleHeaderDragLeave(e: DragEvent) {
+  const target = e.currentTarget as HTMLElement
+  if (!target.contains(e.relatedTarget as Node)) {
+    isHeaderDraggingOver.value = false
+  }
+}
+
+function handleHeaderDrop(e: DragEvent) {
+  if (!props.editable) return
+  e.preventDefault()
+  isHeaderDraggingOver.value = false
+
+  const raw = e.dataTransfer?.getData('application/json')
+  if (!raw) return
+
+  try {
+    const payload = JSON.parse(raw)
+    if (payload.type === 'tag') {
+      applyTagToBasics(payload.data)
+    }
+  } catch (err) {
+    console.error('Failed to parse dropped tag data:', err)
+  }
+}
+
+// 将拖入或点击的标签应用至 basics
+function applyTagToBasics(tag: any) {
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) rd.basics = {}
+
+  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
+  if (tag.key && standardKeys.includes(tag.key)) {
+    // 写入常规标准字段
+    rd.basics[tag.key] = tag.value || rd.basics[tag.key] || `${tag.label}内容`
+  } else {
+    // 写入自定义扩展字段
+    if (!Array.isArray(rd.basics.custom_fields)) {
+      rd.basics.custom_fields = []
+    }
+    // 检查是否已有同名标签
+    const existing = rd.basics.custom_fields.find((cf: any) => cf.label === tag.label)
+    if (existing) {
+      existing.value = tag.value || existing.value
+    } else {
+      rd.basics.custom_fields.push({
+        id: tag.id || `cf_${Date.now()}`,
+        label: tag.label,
+        value: tag.value || '点击编辑内容',
+        icon: tag.icon || '🏷️',
+      })
+    }
+  }
+
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
+// 从画板上移除标签
+function removeTagFromHeader(chip: ActiveTagChip, e?: MouseEvent) {
+  if (e) e.stopPropagation()
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) return
+
+  if (chip.kind === 'standard') {
+    rd.basics[chip.key] = ''
+  } else {
+    const cfs = Array.isArray(rd.basics.custom_fields) ? rd.basics.custom_fields : []
+    const idx = parseInt(chip.id.replace('cf_', ''), 10)
+    if (!isNaN(idx) && idx >= 0 && idx < cfs.length) {
+      cfs.splice(idx, 1)
+      rd.basics.custom_fields = [...cfs]
+    } else {
+      rd.basics.custom_fields = cfs.filter((cf: any) => cf.label !== chip.label)
+    }
+  }
+
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
+// 标签原地编辑 (Inline Click-to-Edit)
+const editingChipId = ref<string | null>(null)
+const editingChipValue = ref('')
+
+function startEditChip(chip: ActiveTagChip) {
+  if (!props.editable) return
+  editingChipId.value = chip.id
+  editingChipValue.value = chip.value
+  nextTick(() => {
+    const input = document.getElementById(`inline-chip-input-${chip.id}`)
+    input?.focus()
+  })
+}
+
+function finishEditChip(chip: ActiveTagChip) {
+  if (!editingChipId.value) return
+  const val = editingChipValue.value.trim()
+  editingChipId.value = null
+
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) rd.basics = {}
+
+  if (chip.kind === 'standard') {
+    rd.basics[chip.key] = val
+  } else {
+    const cfs = Array.isArray(rd.basics.custom_fields) ? rd.basics.custom_fields : []
+    const idx = parseInt(chip.id.replace('cf_', ''), 10)
+    if (!isNaN(idx) && cfs[idx]) {
+      cfs[idx].value = val
+      rd.basics.custom_fields = [...cfs]
+    }
+  }
+
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
+// 姓名/求职头衔/总结 原地点击编辑
+const editingField = ref<string | null>(null)
+const editingFieldValue = ref('')
+
+function startEditField(fieldName: 'name' | 'label' | 'summary') {
+  if (!props.editable) return
+  editingField.value = fieldName
+  editingFieldValue.value = basics.value[fieldName] || ''
+  nextTick(() => {
+    const el = document.getElementById(`inline-field-${fieldName}`)
+    el?.focus()
+  })
+}
+
+function finishEditField(fieldName: 'name' | 'label' | 'summary') {
+  if (!editingField.value) return
+  const val = editingFieldValue.value.trim()
+  editingField.value = null
+
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) rd.basics = {}
+  rd.basics[fieldName] = val
+
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
+// =================== 大模块拖拽排序交互 ===================
+const draggingSectionId = ref<string | null>(null)
+const dropTargetSectionId = ref<string | null>(null)
+const dropPosition = ref<'before' | 'after'>('before')
+
+function onSectionDragStart(e: DragEvent, secId: string) {
+  if (!props.editable) return
+  draggingSectionId.value = secId
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'section', sectionId: secId }))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function onSectionDragOver(e: DragEvent, targetSecId: string) {
+  if (!props.editable || !draggingSectionId.value || draggingSectionId.value === targetSecId) return
+  e.preventDefault()
+  dropTargetSectionId.value = targetSecId
+
+  const targetEl = e.currentTarget as HTMLElement
+  const rect = targetEl.getBoundingClientRect()
+  const offset = e.clientY - rect.top
+  dropPosition.value = offset < rect.height / 2 ? 'before' : 'after'
+}
+
+function onSectionDragLeave(e: DragEvent) {
+  const target = e.currentTarget as HTMLElement
+  if (!target.contains(e.relatedTarget as Node)) {
+    dropTargetSectionId.value = null
+  }
+}
+
+function onSectionDrop(e: DragEvent, targetSecId: string) {
+  if (!props.editable || !draggingSectionId.value) return
+  e.preventDefault()
+
+  const srcId = draggingSectionId.value
+  const targetId = targetSecId
+  const pos = dropPosition.value
+
+  draggingSectionId.value = null
+  dropTargetSectionId.value = null
+
+  if (srcId === targetId) return
+
+  const rd = { ...props.resumeData }
+  let currentOrder: string[] = [...(rd.section_order || defaultSectionOrder)]
+
+  // 移出源项
+  currentOrder = currentOrder.filter((id) => id !== srcId)
+  const targetIdx = currentOrder.indexOf(targetId)
+
+  if (targetIdx !== -1) {
+    const insertIdx = pos === 'before' ? targetIdx : targetIdx + 1
+    currentOrder.splice(insertIdx, 0, srcId)
+  } else {
+    currentOrder.push(srcId)
+  }
+
+  rd.section_order = currentOrder
+  emit('update:resume-data', rd)
+  emit('change')
+}
+
+defineExpose({
+  applyTagToBasics,
+})
 </script>
 
 <template>
-  <div class="resume-paper-container flex flex-col items-center w-full overflow-x-auto pb-6">
+  <div class="resume-paper-container flex flex-col items-center w-full overflow-x-auto pb-8 select-text">
     <!-- 纸质顶部微型控制工具条 -->
     <div class="w-full flex items-center justify-between pb-2 mb-3 text-xs text-slate-500 border-b border-slate-200/60 shrink-0">
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="font-semibold text-slate-700">实时 A4 纸质渲染</span>
+        <span class="font-bold text-slate-800">A4 交互式简历画布</span>
+        <span class="text-[10px] text-slate-400 font-normal">（支持标签拖入吸附、所见即所得改字、模块手柄调序）</span>
       </div>
 
-      <!-- 缩放与配色 -->
-      <div class="flex items-center gap-2.5">
-        <!-- 比例切换 -->
+      <!-- 缩放与配色快捷按钮 -->
+      <div class="flex items-center gap-2">
         <div class="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded text-[10px]">
           <button
-            class="px-1.5 py-0.5 rounded transition font-medium"
+            class="px-2 py-0.5 rounded transition font-medium"
             :class="internalZoom === 0.68 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
             @click="internalZoom = 0.68"
           >
             适屏 68%
           </button>
           <button
-            class="px-1.5 py-0.5 rounded transition font-medium"
+            class="px-2 py-0.5 rounded transition font-medium"
             :class="internalZoom === 0.85 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
             @click="internalZoom = 0.85"
           >
             85%
           </button>
           <button
-            class="px-1.5 py-0.5 rounded transition font-medium"
+            class="px-2 py-0.5 rounded transition font-medium"
             :class="internalZoom === 1.0 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
             @click="internalZoom = 1.0"
           >
             100%
           </button>
         </div>
-
-        <!-- 配色主题切换 -->
-        <div class="flex items-center gap-1">
-          <button
-            class="px-2 py-0.5 rounded text-[10px] font-medium border transition-all"
-            :class="activeTheme === 'classic' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 hover:bg-slate-50'"
-            @click="activeTheme = 'classic'"
-          >
-            经典黑
-          </button>
-          <button
-            class="px-2 py-0.5 rounded text-[10px] font-medium border transition-all"
-            :class="activeTheme === 'indigo' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 hover:bg-slate-50'"
-            @click="activeTheme = 'indigo'"
-          >
-            科技蓝
-          </button>
-          <button
-            class="px-2 py-0.5 rounded text-[10px] font-medium border transition-all"
-            :class="activeTheme === 'emerald' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 hover:bg-slate-50'"
-            @click="activeTheme = 'emerald'"
-          >
-            雅绿
-          </button>
-          <button
-            class="px-2 py-0.5 rounded text-[10px] font-medium border transition-all"
-            :class="activeTheme === 'slate' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-600 hover:bg-slate-50'"
-            @click="activeTheme = 'slate'"
-          >
-            雅灰
-          </button>
-        </div>
       </div>
     </div>
 
-    <!-- 标准 A4 纸张主体容器 (物理固定 794px 宽，按比例缩放，确保 100% 格式无畸变) -->
+    <!-- 真实 210mm x 297mm 标准 A4 纸张画布 -->
     <div
-      class="a4-scalable-wrapper mx-auto transition-all"
-      :style="{
-        width: `${Math.round(794 * currentScale)}px`,
-        height: `${Math.round(1123 * currentScale)}px`,
-        position: 'relative',
-        flexShrink: 0
-      }"
+      class="a4-paper-wrapper transition-all duration-150 origin-top"
+      :style="{ transform: `scale(${currentScale})` }"
     >
       <div
-        class="a4-sheet bg-white text-slate-900 shadow-2xl border border-slate-300 rounded-xs select-text shrink-0"
+        class="a4-paper relative bg-white text-slate-800 shadow-xl border border-slate-200/80 mx-auto"
         :style="{
           width: '794px',
           minHeight: '1123px',
-          transform: `scale(${currentScale})`,
-          transformOrigin: 'top left',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          padding: '38px 46px',
-          boxSizing: 'border-box'
+          padding: '40px 48px',
+          boxSizing: 'border-box',
+          fontFamily: `-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`,
         }"
       >
-        <!-- ================= 1. Header (左联系方式、中姓名、右头像) ================= -->
-        <header v-if="isSectionVisible('basics')" class="header-section pb-4 mb-4 flex justify-between items-start gap-4">
-          <!-- 左侧求职意向与联系方式 -->
-          <div class="header-left text-xs text-slate-700 space-y-1.5 pt-1 flex-1 min-w-[360px]">
-            <div v-if="basics.label || basics.title" class="flex items-center gap-2">
-              <span class="text-slate-500">👤 求职意向</span>
-              <span class="font-bold text-slate-900">{{ basics.label || basics.title }}</span>
-            </div>
-
-          <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-slate-600 font-sans pt-0.5">
-            <div v-if="basics.email" class="flex items-center gap-1.5">
-              <span>✉</span>
-              <span class="font-mono">{{ basics.email }}</span>
-            </div>
-            <div v-if="basics.phone" class="flex items-center gap-1.5">
-              <span>📞</span>
-              <span class="font-mono">{{ basics.phone }}</span>
-            </div>
-            <div v-if="basics.birthDate || basics.birth" class="flex items-center gap-1.5">
-              <span>📅</span>
-              <span class="font-mono">{{ basics.birthDate || basics.birth }}</span>
-            </div>
-            <div v-if="basics.location" class="flex items-center gap-1.5">
-              <span>📍</span>
-              <span>{{ basics.location }}</span>
-            </div>
-            <div v-if="basics.github" class="col-span-2 flex items-center gap-1.5">
-              <span>🔗</span>
-              <span class="font-mono truncate max-w-[280px]">{{ basics.github }}</span>
-            </div>
-            <div v-if="basics.blog" class="col-span-2 flex items-center gap-1.5">
-              <span>🌐</span>
-              <span class="font-mono truncate max-w-[280px]">{{ basics.blog }}</span>
-            </div>
-          </div>
-
-          <!-- 自定义字段 -->
-          <div v-if="basics.custom_fields?.length" class="flex flex-wrap gap-x-4 gap-y-0.5 pt-1 text-[11px] text-slate-600">
-            <span v-for="(cf, i) in basics.custom_fields" :key="i">
-              <strong>{{ cf.label }}:</strong> {{ cf.value }}
-            </span>
-          </div>
-
-          <!-- 一句话总结 -->
-          <p v-if="basics.summary" class="text-xs text-slate-600 mt-1 leading-relaxed max-w-[420px]">
-            {{ basics.summary }}
-          </p>
-        </div>
-
-        <!-- 中部大姓名 + 右侧证件照 -->
-        <div class="header-right flex items-center gap-5 shrink-0">
-          <h1 class="text-3xl font-extrabold tracking-wider text-slate-950 font-sans">
-            {{ basics.name || '您的姓名' }}
-          </h1>
-
-          <!-- 头像照片 -->
-          <div class="w-[78px] h-[104px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
-            <img
-              v-if="basics.photo || basics.avatar"
-              :src="basics.photo || basics.avatar"
-              class="w-full h-full object-cover"
-              alt="证件照"
-            />
-            <div v-else class="text-center text-slate-300 flex flex-col items-center justify-center h-full p-1">
-              <span class="text-2xl">👤</span>
-              <span class="text-[9px] scale-90">免冠照</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <!-- ================= 2. 教育经历 ================= -->
-      <section v-if="education.length && isSectionVisible('education')" class="section mb-4">
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
+        <!-- ================= 1. Header (磁吸拖拽槽: 左求职与联系方式、中姓名、右头像) ================= -->
+        <header
+          v-if="isSectionVisible('basics')"
+          class="header-section group/header relative pb-4 mb-4 border-b border-slate-100 transition-all rounded-xl p-2"
+          :class="isHeaderDraggingOver ? 'bg-primary-50/70 ring-2 ring-dashed ring-primary-500 shadow-sm' : 'hover:bg-slate-50/40'"
+          @dragover="handleHeaderDragOver"
+          @dragleave="handleHeaderDragLeave"
+          @drop="handleHeaderDrop"
         >
-          <span>教育经历</span>
-        </h2>
-
-        <div class="space-y-2.5 pt-1">
-          <div v-for="(edu, idx) in education" :key="idx" class="edu-item">
-            <div class="flex items-baseline justify-between text-xs font-sans">
-              <span class="font-bold text-slate-900 text-[13px] min-w-[120px]">{{ edu.institution || edu.school || '院校名称' }}</span>
-              <span class="text-slate-600 font-medium text-center flex-1 px-2">
-                {{ formatEduSub(edu) }}
-              </span>
-              <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
-                {{ formatDate(edu.startDate || edu.start_date, edu.endDate || edu.end_date) }}
-              </span>
+          <!-- 拖拽悬停吸附指示框 -->
+          <div
+            v-if="isHeaderDraggingOver"
+            class="absolute inset-0 bg-primary-50/80 backdrop-blur-2xs rounded-xl flex items-center justify-center z-30 pointer-events-none border-2 border-dashed border-primary-500 animate-pulse"
+          >
+            <div class="px-4 py-2 bg-white rounded-xl shadow-md border border-primary-200 text-primary-700 font-bold text-xs flex items-center gap-2">
+              <span class="text-base">🎯</span>
+              <span>松开鼠标，将标签直接吸附至简历抬头</span>
             </div>
-
-            <!-- 课程与学业成就 -->
-            <ul v-if="edu.highlights?.length || edu.courses?.length" class="mt-1 space-y-0.5 text-xs text-slate-700 list-none pl-0">
-              <li v-for="(hl, hli) in (edu.highlights || edu.courses || [])" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
-                <span class="text-slate-400 font-bold">•</span>
-                <span>{{ hl }}</span>
-              </li>
-            </ul>
           </div>
-        </div>
-      </section>
 
-      <!-- ================= 3. 专业技能 (0ms 实时响应：支持多行长句/编号技能与标签) ================= -->
-      <section v-if="parsedSkills.length && isSectionVisible('skills')" class="section mb-4">
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
-        >
-          <span>专业技能</span>
-        </h2>
+          <div class="flex justify-between items-start gap-4">
+            <!-- 左侧求职意向与已上板的标签胶囊群 -->
+            <div class="header-left text-xs text-slate-700 space-y-2 pt-0.5 flex-1 min-w-[360px]">
+              <!-- 求职意向 (支持原地点击改字) -->
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400 font-medium text-[11px]">👤 求职意向:</span>
+                <div v-if="editingField === 'label'" class="flex-1">
+                  <input
+                    id="inline-field-label"
+                    v-model="editingFieldValue"
+                    class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 w-full bg-primary-50/30 rounded"
+                    @keydown.enter="finishEditField('label')"
+                    @blur="finishEditField('label')"
+                  />
+                </div>
+                <div
+                  v-else
+                  class="group/title font-bold text-slate-900 cursor-pointer hover:text-primary-600 flex items-center gap-1 transition"
+                  title="点击直接原地修改意向头衔"
+                  @click="startEditField('label')"
+                >
+                  <span>{{ basics.label || basics.title || '点击设置求职意向 (如：全栈开发工程师)' }}</span>
+                  <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition">✎</span>
+                </div>
+              </div>
 
-        <div class="space-y-1.5 pt-1 text-xs text-slate-800 font-sans leading-relaxed">
-          <div v-for="(sk, idx) in parsedSkills" :key="idx" class="skill-row">
-            <!-- 纯文本行 -->
-            <div v-if="sk.type === 'text'" class="flex items-start gap-1.5">
-              <span v-if="!/^(\d+[\.、]|[•\-\*])/.test((sk.text || '').trim())" class="text-slate-400 font-bold">•</span>
-              <span class="flex-1" v-html="formatSkillText(sk.text || '')"></span>
-            </div>
-
-            <!-- 分组标签行 -->
-            <div v-else-if="sk.type === 'group'" class="flex items-baseline gap-2">
-              <span v-if="sk.name" class="font-bold text-slate-900 shrink-0">{{ sk.name }}:</span>
-              <div v-if="sk.keywords?.length" class="flex flex-wrap gap-1.5 flex-1">
-                <span
-                  v-for="(kw, kwi) in sk.keywords"
-                  :key="kwi"
-                  class="px-2 py-0.5 rounded text-[11px] font-mono border"
+              <!-- 磁吸标签胶囊网格流 (已上板的所有联系与属性标签) -->
+              <div class="flex flex-wrap gap-1.5 pt-1">
+                <div
+                  v-for="chip in activeHeaderChips"
+                  :key="chip.id"
+                  class="group/chip relative inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-sans transition-all"
                   :style="{
                     backgroundColor: themeStyles.primaryLight,
                     borderColor: themeStyles.primaryBorder,
                     color: themeStyles.textPrimary
                   }"
                 >
-                  {{ kw }}
-                </span>
+                  <span class="text-xs shrink-0 select-none">{{ chip.icon }}</span>
+                  <span class="font-medium text-slate-500 text-[10px]">{{ chip.label }}:</span>
+
+                  <!-- 原地编辑输入框 -->
+                  <div v-if="editingChipId === chip.id" class="inline-block">
+                    <input
+                      :id="`inline-chip-input-${chip.id}`"
+                      v-model="editingChipValue"
+                      class="border-b border-primary-500 outline-none bg-white text-[11px] font-mono px-1 py-0 rounded text-slate-800"
+                      @keydown.enter="finishEditChip(chip)"
+                      @blur="finishEditChip(chip)"
+                    />
+                  </div>
+                  <!-- 原地展示文本 (点击即编辑) -->
+                  <span
+                    v-else
+                    class="font-mono font-medium truncate max-w-[200px] cursor-pointer hover:underline"
+                    title="点击原地编辑内容"
+                    @click="startEditChip(chip)"
+                  >
+                    {{ chip.value }}
+                  </span>
+
+                  <!-- 移出标签快捷按钮 (x) -->
+                  <button
+                    v-if="editable"
+                    class="ml-0.5 text-slate-400 hover:text-red-600 text-xs font-bold leading-none opacity-0 group-hover/chip:opacity-100 transition"
+                    title="移出此标签"
+                    @click="removeTagFromHeader(chip, $event)"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <!-- 空态吸附提示 (当没有任何标签时) -->
+                <div
+                  v-if="!activeHeaderChips.length"
+                  class="px-2.5 py-1 rounded-md border border-dashed border-slate-300 text-slate-400 text-[11px] flex items-center gap-1.5 bg-slate-50/50"
+                >
+                  <span>🏷️</span>
+                  <span>从左侧积木池拖入手机、微信、期望薪资等标签</span>
+                </div>
+              </div>
+
+              <!-- 一句话总结 (支持原地点击改字) -->
+              <div class="pt-1">
+                <div v-if="editingField === 'summary'">
+                  <textarea
+                    id="inline-field-summary"
+                    v-model="editingFieldValue"
+                    rows="2"
+                    class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1 outline-none bg-primary-50/20"
+                    @keydown.enter.ctrl="finishEditField('summary')"
+                    @blur="finishEditField('summary')"
+                  />
+                  <div class="text-[10px] text-slate-400 text-right">按 Ctrl+Enter 或点击空白处完成</div>
+                </div>
+                <p
+                  v-else
+                  class="group/summary text-xs text-slate-600 leading-relaxed max-w-[440px] cursor-pointer hover:text-slate-900 transition flex items-start gap-1"
+                  title="点击原地修改个人总结"
+                  @click="startEditField('summary')"
+                >
+                  <span class="flex-1">{{ basics.summary || '点击输入一句话个人技术特长与综合优势…' }}</span>
+                  <span class="text-[10px] text-slate-300 group-hover/summary:text-primary-500 opacity-0 group-hover/summary:opacity-100 transition shrink-0">✎</span>
+                </p>
+              </div>
+            </div>
+
+            <!-- 中部大姓名 + 右侧证件照 -->
+            <div class="header-right flex items-center gap-4 shrink-0">
+              <!-- 姓名 (支持原地点击改字) -->
+              <div v-if="editingField === 'name'">
+                <input
+                  id="inline-field-name"
+                  v-model="editingFieldValue"
+                  class="text-2xl font-extrabold tracking-wider text-slate-950 font-sans border-b border-primary-500 outline-none px-1 bg-primary-50/30 rounded"
+                  @keydown.enter="finishEditField('name')"
+                  @blur="finishEditField('name')"
+                />
+              </div>
+              <h1
+                v-else
+                class="group/name text-3xl font-extrabold tracking-wider text-slate-950 font-sans cursor-pointer hover:text-primary-600 transition flex items-center gap-1"
+                title="点击直接修改姓名"
+                @click="startEditField('name')"
+              >
+                <span>{{ basics.name || '您的姓名' }}</span>
+                <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition">✎</span>
+              </h1>
+
+              <!-- 免冠头像照片 -->
+              <div class="w-[74px] h-[98px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
+                <img
+                  v-if="basics.photo || basics.avatar"
+                  :src="basics.photo || basics.avatar"
+                  class="w-full h-full object-cover"
+                  alt="证件照"
+                />
+                <div v-else class="text-center text-slate-300 flex flex-col items-center justify-center h-full p-1 select-none">
+                  <span class="text-2xl">👤</span>
+                  <span class="text-[9px] scale-90">免冠照</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </header>
 
-      <!-- ================= 4. 项目经历 ================= -->
-      <section v-if="projects.length && isSectionVisible('projects')" class="section mb-4">
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
-        >
-          <span>项目经历</span>
-        </h2>
-
-        <div class="space-y-3 pt-1">
-          <div v-for="(proj, idx) in projects" :key="idx" class="proj-item">
-            <div class="flex items-baseline justify-between text-xs">
-              <div class="flex items-baseline gap-2">
-                <span class="font-bold text-slate-950 text-[13px]">{{ proj.name || '项目名称' }}</span>
-                <span v-if="proj.link || proj.url" class="text-[11px] text-blue-600 font-mono underline truncate max-w-[200px]">
-                  {{ proj.link || proj.url }}
-                </span>
+        <!-- ================= 2~N 动态大模块流 (支持通过手柄 ⠿ 直接上下拖拽换序) ================= -->
+        <div class="resume-sections-flow space-y-4">
+          <div
+            v-for="secId in dynamicSections"
+            :key="secId"
+            class="section-wrapper group/sec relative transition-all rounded-lg p-1"
+            :class="[
+              dropTargetSectionId === secId
+                ? (dropPosition === 'before' ? 'border-t-2 border-primary-500 pt-2' : 'border-b-2 border-primary-500 pb-2')
+                : ''
+            ]"
+            @dragover="onSectionDragOver($event, secId)"
+            @dragleave="onSectionDragLeave"
+            @drop="onSectionDrop($event, secId)"
+          >
+            <!-- 模块悬浮手柄与操作栏 -->
+            <div
+              v-if="editable"
+              class="section-handle-bar absolute -top-3 right-2 hidden group-hover/sec:flex items-center gap-1.5 bg-white/95 backdrop-blur-xs border border-slate-200 shadow-md rounded-lg px-2 py-0.5 z-20 transition"
+            >
+              <!-- 拖动换序手柄 -->
+              <div
+                draggable="true"
+                class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-primary-600 flex items-center gap-1 text-[11px] select-none pr-1 border-r border-slate-200"
+                title="按住上下拖动调整模块在简历中的出现顺序"
+                @dragstart="onSectionDragStart($event, secId)"
+              >
+                <span>⠿</span>
+                <span class="font-medium">按住拖动调序</span>
               </div>
-              <span v-if="proj.role" class="text-slate-600 font-medium text-center flex-1 px-2">
-                {{ proj.role }}
-              </span>
-              <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
-                {{ formatDate(proj.startDate || proj.start_date, proj.endDate || proj.end_date) }}
-              </span>
+
+              <!-- AI 优化本模块 -->
+              <button
+                class="text-[11px] text-primary-600 hover:underline flex items-center gap-0.5"
+                @click="emit('regenerate-section', secId)"
+              >
+                <span>✨</span>
+                <span>AI 优化</span>
+              </button>
             </div>
 
-            <div v-if="proj.description" class="text-xs text-slate-600 mt-1 leading-relaxed">
-              {{ proj.description }}
-            </div>
+            <!-- ---------------- 具体模块分支渲染 ---------------- -->
 
-            <ul v-if="proj.highlights?.length" class="mt-1 space-y-1 text-xs text-slate-700 list-none pl-0">
-              <li v-for="(hl, hli) in proj.highlights" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
-                <span class="text-slate-400 font-bold">•</span>
-                <span>{{ hl }}</span>
-              </li>
-            </ul>
+            <!-- 1. 教育背景 -->
+            <section v-if="secId === 'education' && education.length" class="section">
+              <h2
+                class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                :style="{ borderColor: themeStyles.lineColor }"
+              >
+                <span>教育经历</span>
+              </h2>
+              <div class="space-y-2.5 pt-1">
+                <div v-for="(edu, idx) in education" :key="idx" class="edu-item">
+                  <div class="flex items-baseline justify-between text-xs font-sans">
+                    <span class="font-bold text-slate-900 text-[13px] min-w-[120px]">{{ edu.institution || edu.school || '院校名称' }}</span>
+                    <span class="text-slate-600 font-medium text-center flex-1 px-2">
+                      {{ formatEduSub(edu) }}
+                    </span>
+                    <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
+                      {{ formatDate(edu.startDate || edu.start_date, edu.endDate || edu.end_date) }}
+                    </span>
+                  </div>
+                  <ul v-if="edu.highlights?.length || edu.courses?.length" class="mt-1 space-y-0.5 text-xs text-slate-700 list-none pl-0">
+                    <li v-for="(hl, hli) in (edu.highlights || edu.courses || [])" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
+                      <span class="text-slate-400 font-bold">•</span>
+                      <span>{{ hl }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <!-- 2. 专业技能 -->
+            <section v-else-if="secId === 'skills' && parsedSkills.length" class="section">
+              <h2
+                class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                :style="{ borderColor: themeStyles.lineColor }"
+              >
+                <span>专业技能</span>
+              </h2>
+              <div class="space-y-1.5 pt-1 text-xs text-slate-800 font-sans leading-relaxed">
+                <div v-for="(sk, idx) in parsedSkills" :key="idx" class="skill-row">
+                  <div v-if="sk.type === 'text'" class="flex items-start gap-1.5">
+                    <span v-if="!/^(\d+[\.、]|[•\-\*])/.test((sk.text || '').trim())" class="text-slate-400 font-bold">•</span>
+                    <span class="flex-1" v-html="formatSkillText(sk.text || '')"></span>
+                  </div>
+                  <div v-else-if="sk.type === 'group'" class="flex items-baseline gap-2">
+                    <span v-if="sk.name" class="font-bold text-slate-900 shrink-0">{{ sk.name }}:</span>
+                    <div v-if="sk.keywords?.length" class="flex flex-wrap gap-1.5 flex-1">
+                      <span
+                        v-for="(kw, kwi) in sk.keywords"
+                        :key="kwi"
+                        class="px-2 py-0.5 rounded text-[11px] font-mono border"
+                        :style="{
+                          backgroundColor: themeStyles.primaryLight,
+                          borderColor: themeStyles.primaryBorder,
+                          color: themeStyles.textPrimary
+                        }"
+                      >
+                        {{ kw }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 3. 工作经历 -->
+            <section v-else-if="secId === 'experience' && experience.length" class="section">
+              <h2
+                class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                :style="{ borderColor: themeStyles.lineColor }"
+              >
+                <span>工作经历</span>
+              </h2>
+              <div class="space-y-3 pt-1">
+                <div v-for="(exp, idx) in experience" :key="idx" class="exp-item">
+                  <div class="flex items-baseline justify-between text-xs">
+                    <span class="font-bold text-slate-950 text-[13px]">{{ exp.company || '公司名称' }}</span>
+                    <span v-if="exp.role || exp.position" class="text-slate-600 font-medium text-center flex-1 px-2">
+                      {{ exp.role || exp.position }}
+                    </span>
+                    <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
+                      {{ formatDate(exp.startDate || exp.start_date, exp.endDate || exp.end_date) }}
+                    </span>
+                  </div>
+                  <p v-if="exp.description" class="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    {{ exp.description }}
+                  </p>
+                  <ul v-if="exp.highlights?.length" class="mt-1 space-y-1 text-xs text-slate-700 list-none pl-0">
+                    <li v-for="(hl, hli) in exp.highlights" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
+                      <span class="text-slate-400 font-bold">•</span>
+                      <span>{{ hl }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <!-- 4. 项目经历 -->
+            <section v-else-if="secId === 'projects' && projects.length" class="section">
+              <h2
+                class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                :style="{ borderColor: themeStyles.lineColor }"
+              >
+                <span>项目经历</span>
+              </h2>
+              <div class="space-y-3 pt-1">
+                <div v-for="(proj, idx) in projects" :key="idx" class="proj-item">
+                  <div class="flex items-baseline justify-between text-xs">
+                    <div class="flex items-baseline gap-2">
+                      <span class="font-bold text-slate-950 text-[13px]">{{ proj.name || '项目名称' }}</span>
+                      <span v-if="proj.link || proj.url" class="text-[11px] text-blue-600 font-mono underline truncate max-w-[200px]">
+                        {{ proj.link || proj.url }}
+                      </span>
+                    </div>
+                    <span v-if="proj.role" class="text-slate-600 font-medium text-center flex-1 px-2">
+                      {{ proj.role }}
+                    </span>
+                    <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
+                      {{ formatDate(proj.startDate || proj.start_date, proj.endDate || proj.end_date) }}
+                    </span>
+                  </div>
+                  <div v-if="proj.description" class="text-xs text-slate-600 mt-1 leading-relaxed">
+                    {{ proj.description }}
+                  </div>
+                  <ul v-if="proj.highlights?.length" class="mt-1 space-y-1 text-xs text-slate-700 list-none pl-0">
+                    <li v-for="(hl, hli) in proj.highlights" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
+                      <span class="text-slate-400 font-bold">•</span>
+                      <span>{{ hl }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <!-- 5. 个人亮点 -->
+            <section v-else-if="secId === 'highlights' && highlights.length" class="section">
+              <h2
+                class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                :style="{ borderColor: themeStyles.lineColor }"
+              >
+                <span>个人亮点</span>
+              </h2>
+              <ul class="space-y-1 pt-1 text-xs text-slate-700 list-none pl-0">
+                <li v-for="(hl, idx) in highlights" :key="idx" class="flex items-start gap-1.5 leading-relaxed">
+                  <span class="text-slate-400 font-bold">•</span>
+                  <span>{{ hl }}</span>
+                </li>
+              </ul>
+            </section>
+
+            <!-- 6. 自定义模块 (custom_xxx) -->
+            <section
+              v-else-if="secId.startsWith('custom_') && customSections.find((c: any) => `custom_${c.id}` === secId || c.id === secId)"
+              class="section"
+            >
+              <template v-for="cs in [customSections.find((c: any) => `custom_${c.id}` === secId || c.id === secId)]" :key="cs.id">
+                <h2
+                  class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
+                  :style="{ borderColor: themeStyles.lineColor }"
+                >
+                  <span>{{ cs.title }}</span>
+                </h2>
+                <div class="space-y-2 pt-1">
+                  <div v-for="(it, iti) in cs.items || []" :key="iti" class="text-xs">
+                    <div class="flex items-baseline justify-between">
+                      <span class="font-bold text-slate-900">{{ it.title }}</span>
+                      <span v-if="it.subtitle" class="text-slate-500 font-medium">{{ it.subtitle }}</span>
+                      <span v-if="it.date" class="text-slate-400 font-mono text-[11px]">{{ it.date }}</span>
+                    </div>
+                    <p v-if="it.description" class="text-slate-600 mt-0.5 leading-relaxed">{{ it.description }}</p>
+                  </div>
+                </div>
+              </template>
+            </section>
           </div>
         </div>
-      </section>
 
-      <!-- ================= 5. 工作经历 ================= -->
-      <section v-if="experience.length && isSectionVisible('experience')" class="section mb-4">
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
-        >
-          <span>工作经历</span>
-        </h2>
-
-        <div class="space-y-3 pt-1">
-          <div v-for="(exp, idx) in experience" :key="idx" class="exp-item">
-            <div class="flex items-baseline justify-between text-xs">
-              <span class="font-bold text-slate-950 text-[13px]">{{ exp.company || '公司名称' }}</span>
-              <span v-if="exp.role || exp.position" class="text-slate-600 font-medium text-center flex-1 px-2">
-                {{ exp.role || exp.position }}
-              </span>
-              <span class="text-slate-500 font-mono text-[11px] text-right shrink-0">
-                {{ formatDate(exp.startDate || exp.start_date, exp.endDate || exp.end_date) }}
-              </span>
-            </div>
-
-            <p v-if="exp.description" class="text-xs text-slate-600 mt-0.5 leading-relaxed">
-              {{ exp.description }}
-            </p>
-
-            <ul v-if="exp.highlights?.length" class="mt-1 space-y-1 text-xs text-slate-700 list-none pl-0">
-              <li v-for="(hl, hli) in exp.highlights" :key="hli" class="flex items-start gap-1.5 leading-relaxed">
-                <span class="text-slate-400 font-bold">•</span>
-                <span>{{ hl }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================= 6. 个人亮点 ================= -->
-      <section v-if="highlights.length && isSectionVisible('highlights')" class="section mb-4">
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
-        >
-          <span>个人亮点</span>
-        </h2>
-        <ul class="space-y-1 pt-1 text-xs text-slate-700 list-none pl-0">
-          <li v-for="(hl, idx) in highlights" :key="idx" class="flex items-start gap-1.5 leading-relaxed">
-            <span class="text-slate-400 font-bold">•</span>
-            <span>{{ hl }}</span>
-          </li>
-        </ul>
-      </section>
-
-      <!-- ================= 7. 自定义板块 ================= -->
-      <section
-        v-for="cs in customSections.filter((c: any) => isSectionVisible(c.id) && isSectionVisible('custom_' + c.id))"
-        :key="cs.id"
-        class="section mb-4"
-      >
-        <h2
-          class="sec-title text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-2 pb-1 border-b"
-          :style="{ borderColor: themeStyles.lineColor }"
-        >
-          <span>{{ cs.title }}</span>
-        </h2>
-        <div class="space-y-2 pt-1">
-          <div v-for="(it, iti) in cs.items || []" :key="iti" class="text-xs">
-            <div class="flex items-baseline justify-between">
-              <span class="font-bold text-slate-900">{{ it.title }}</span>
-              <span v-if="it.subtitle" class="text-slate-600">{{ it.subtitle }}</span>
-              <span v-if="it.date" class="text-slate-500 font-mono text-[11px]">{{ it.date }}</span>
-            </div>
-            <p v-if="it.description" class="text-slate-600 mt-0.5 leading-relaxed">{{ it.description }}</p>
-            <ul v-if="it.highlights?.length" class="mt-1 space-y-0.5 text-slate-700 list-none pl-0">
-              <li v-for="(hl, hli) in it.highlights" :key="hli" class="flex items-start gap-1.5">
-                <span class="text-slate-400 font-bold">•</span>
-                <span>{{ hl }}</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <!-- 空白引导占位 -->
-      <div
-        v-if="!basics.name && !parsedSkills.length && !projects.length && !experience.length && !education.length"
-        class="text-center py-24 text-slate-300 text-xs border border-dashed border-slate-200 rounded my-8"
-      >
-        左侧编辑表单输入内容，右侧将 0ms 实时以标准 A4 排版呈现
+        <!-- 纸张底脚空白占位 -->
+        <div class="h-6"></div>
       </div>
     </div>
   </div>
-</div>
 </template>
 
 <style scoped>
-.a4-sheet {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  line-height: 1.5;
+.a4-paper-wrapper {
+  transform-origin: top center;
+}
+.a4-paper {
+  page-break-after: always;
 }
 </style>

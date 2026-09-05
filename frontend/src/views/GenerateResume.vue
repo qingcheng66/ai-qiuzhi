@@ -4,8 +4,46 @@ import { useRoute, useRouter } from 'vue-router'
 import { apiJd, apiOcr, apiResume, apiTemplates, apiWorkspace, downloadBlob } from '@/api'
 import ResumeWorkbenchEditor, { type CustomSection } from '@/components/ResumeWorkbenchEditor.vue'
 import ResumePaperPreview from '@/components/ResumePaperPreview.vue'
+import ResumeTagPalette from '@/components/ResumeTagPalette.vue'
 import CompanyPositionSelector from '@/components/CompanyPositionSelector.vue'
 import JdAiCopilotDrawer from '@/components/JdAiCopilotDrawer.vue'
+
+const leftPanelMode = ref<'palette' | 'outline'>('palette')
+
+function handleAddTagFromPalette(tag: any) {
+  if (!resume.value) return
+  if (!resume.value.basics) resume.value.basics = {}
+  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
+  if (tag.key && standardKeys.includes(tag.key)) {
+    resume.value.basics[tag.key] = tag.value || resume.value.basics[tag.key] || `${tag.label}内容`
+  } else {
+    if (!Array.isArray(resume.value.basics.custom_fields)) {
+      resume.value.basics.custom_fields = []
+    }
+    const existing = resume.value.basics.custom_fields.find((cf: any) => cf.label === tag.label)
+    if (existing) {
+      existing.value = tag.value || existing.value
+    } else {
+      resume.value.basics.custom_fields.push({
+        id: tag.id || `cf_${Date.now()}`,
+        label: tag.label,
+        value: tag.value || '点击编辑内容',
+        icon: tag.icon || '🏷️',
+      })
+    }
+  }
+  triggerAutoSave()
+  refreshPreview()
+}
+
+function handleCanvasResumeUpdate(newData: any) {
+  resume.value = { ...newData }
+  if (newData.section_order) {
+    sectionOrder.value = [...newData.section_order]
+  }
+  triggerAutoSave()
+  refreshPreview()
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -1307,91 +1345,115 @@ async function doFinalize() {
           :style="isDesktop ? { width: `${leftPercent}%`, minWidth: '200px', maxWidth: '420px' } : {}"
         >
           
-          <!-- 模块编排卡片 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 shrink-0">
-              <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span>📐</span> 模块编排
-              </span>
-              <div class="flex items-center gap-1">
-                <span class="text-[10px] text-slate-400">上下拖拽/排序</span>
+          <!-- 模块编排与标签积木池卡片 -->
+          <div class="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
+            <!-- 顶部双 Tab 切换：🏷️ 标签与积木池 vs 📐 模块大纲 -->
+            <div class="p-2 border-b border-slate-100 shrink-0 flex items-center justify-between bg-slate-50/50">
+              <div class="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-xs font-semibold">
                 <button
-                  class="ml-1 text-[11px] text-slate-400 hover:text-slate-700 hover:bg-slate-100 px-1.5 py-0.5 rounded transition"
-                  title="收起左侧模块栏"
-                  @click="isSidePanelCollapsed = true"
+                  class="px-2.5 py-1 rounded-md transition"
+                  :class="leftPanelMode === 'palette' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'"
+                  @click="leftPanelMode = 'palette'"
                 >
-                  « 收起
+                  🏷️ 标签积木池
+                </button>
+                <button
+                  class="px-2.5 py-1 rounded-md transition"
+                  :class="leftPanelMode === 'outline' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'"
+                  @click="leftPanelMode = 'outline'"
+                >
+                  📐 模块大纲
                 </button>
               </div>
+
+              <button
+                class="text-[11px] text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 px-1.5 py-0.5 rounded transition"
+                title="收起左侧模块栏"
+                @click="isSidePanelCollapsed = true"
+              >
+                « 收起
+              </button>
             </div>
 
-            <div class="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
-              <div
-                v-for="(t, idx) in allTabs"
-                :key="t.id"
-                class="group flex items-center justify-between px-2.5 py-2 rounded-lg border text-xs font-medium cursor-pointer transition select-none"
-                :class="activeTab === t.id
-                  ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
-                  : (sectionVisibility[t.id] === false ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50')"
-                @click="activeTab = t.id"
-              >
-                <div class="flex items-center gap-2 min-w-0 flex-1">
-                  <span class="text-sm shrink-0">{{ t.icon }}</span>
-                  <span class="truncate font-medium">{{ t.label }}</span>
-                </div>
+            <!-- Tab 1: 标签与积木池 (可拖拽上板) -->
+            <div v-if="leftPanelMode === 'palette'" class="flex-1 min-h-0 overflow-hidden">
+              <ResumeTagPalette
+                :resume-data="resume"
+                @add-tag="handleAddTagFromPalette"
+              />
+            </div>
 
-                <div class="flex items-center gap-0.5 shrink-0 opacity-85 group-hover:opacity-100 transition" @click.stop>
-                  <!-- 显隐开关 (Eye) -->
-                  <button
-                    class="p-1 rounded transition hover:scale-110"
-                    :class="activeTab === t.id ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-slate-600'"
-                    :title="sectionVisibility[t.id] === false ? '在纸质画布中隐藏中，点击恢复显示' : '在纸质画布中显示中，点击隐藏'"
-                    @click="toggleSectionVisibility(t.id)"
-                  >
-                    <span v-if="sectionVisibility[t.id] === false" class="text-xs">👁️‍🗨️</span>
-                    <span v-else class="text-xs">👁️</span>
-                  </button>
+            <!-- Tab 2: 模块编排列表 -->
+            <div v-else class="flex-1 min-h-0 flex flex-col p-3 overflow-hidden">
+              <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100 text-[11px] text-slate-400 shrink-0">
+                <span>上下排序 / 显隐开关</span>
+                <span>共 {{ allTabs.length }} 个模块</span>
+              </div>
+              <div class="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
+                <div
+                  v-for="(t, idx) in allTabs"
+                  :key="t.id"
+                  class="group flex items-center justify-between px-2.5 py-2 rounded-lg border text-xs font-medium cursor-pointer transition select-none"
+                  :class="activeTab === t.id
+                    ? 'bg-primary-600 text-white border-primary-600 shadow-xs'
+                    : (sectionVisibility[t.id] === false ? 'bg-slate-50 text-slate-400 border-slate-200 opacity-60' : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50')"
+                  @click="activeTab = t.id"
+                >
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="text-sm shrink-0">{{ t.icon }}</span>
+                    <span class="truncate font-medium">{{ t.label }}</span>
+                  </div>
 
-                  <!-- 排序箭头 -->
-                  <button
-                    class="p-0.5 text-xs disabled:opacity-20 transition"
-                    :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
-                    :disabled="idx === 0"
-                    @click="moveSection(idx, -1)"
-                    title="上移"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    class="p-0.5 text-xs disabled:opacity-20 transition"
-                    :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
-                    :disabled="idx === allTabs.length - 1"
-                    @click="moveSection(idx, 1)"
-                    title="下移"
-                  >
-                    ↓
-                  </button>
+                  <div class="flex items-center gap-0.5 shrink-0 opacity-85 group-hover:opacity-100 transition" @click.stop>
+                    <button
+                      class="p-1 rounded transition hover:scale-110"
+                      :class="activeTab === t.id ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-slate-600'"
+                      :title="sectionVisibility[t.id] === false ? '在纸质画布中隐藏中，点击恢复显示' : '在纸质画布中显示中，点击隐藏'"
+                      @click="toggleSectionVisibility(t.id)"
+                    >
+                      <span v-if="sectionVisibility[t.id] === false" class="text-xs">👁️‍🗨️</span>
+                      <span v-else class="text-xs">👁️</span>
+                    </button>
 
-                  <!-- 删除模块 (Trash) -->
-                  <button
-                    class="p-1 text-xs rounded hover:scale-110 transition ml-0.5"
-                    :class="activeTab === t.id ? 'text-white/70 hover:text-red-200' : 'text-slate-400 hover:text-red-500'"
-                    :title="`删除【${t.label}】模块（可随时在添加模块中恢复）`"
-                    @click="confirmDeleteSection(t.id, t.label)"
-                  >
-                    🗑️
-                  </button>
+                    <button
+                      class="p-0.5 text-xs disabled:opacity-20 transition"
+                      :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
+                      :disabled="idx === 0"
+                      @click="moveSection(idx, -1)"
+                      title="上移"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      class="p-0.5 text-xs disabled:opacity-20 transition"
+                      :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
+                      :disabled="idx === allTabs.length - 1"
+                      @click="moveSection(idx, 1)"
+                      title="下移"
+                    >
+                      ↓
+                    </button>
+
+                    <button
+                      class="p-1 text-xs rounded hover:scale-110 transition ml-0.5"
+                      :class="activeTab === t.id ? 'text-white/70 hover:text-red-200' : 'text-slate-400 hover:text-red-500'"
+                      :title="`删除【${t.label}】模块（可随时在添加模块中恢复）`"
+                      @click="confirmDeleteSection(t.id, t.label)"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- ＋ 添加模块按钮 -->
-            <button
-              class="w-full mt-2 py-1.5 px-2 rounded-lg text-xs font-medium text-primary-600 bg-primary-50/60 border border-dashed border-primary-300 hover:bg-primary-100/60 transition flex items-center justify-center gap-1 shrink-0"
-              @click="showAddSectionModal = true"
-            >
-              <span>➕</span> 添加 / 恢复模块
-            </button>
+              <!-- ＋ 添加模块按钮 -->
+              <button
+                class="w-full mt-2 py-1.5 px-2 rounded-lg text-xs font-medium text-primary-600 bg-primary-50/60 border border-dashed border-primary-300 hover:bg-primary-100/60 transition flex items-center justify-center gap-1 shrink-0"
+                @click="showAddSectionModal = true"
+              >
+                <span>➕</span> 添加 / 恢复模块
+              </button>
+            </div>
           </div>
 
           <!-- 全局配色与排版设置卡片 -->
@@ -1569,6 +1631,9 @@ async function doFinalize() {
               :scale="previewScale"
               :theme-color="resumeThemeColor"
               :section-visibility="sectionVisibility"
+              @update:resume-data="handleCanvasResumeUpdate"
+              @change="() => triggerAutoSave()"
+              @regenerate-section="handleRegenerateSection"
             />
 
             <!-- 后端模板渲染 HTML iframe -->

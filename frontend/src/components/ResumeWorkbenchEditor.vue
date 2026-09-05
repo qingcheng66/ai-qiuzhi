@@ -347,6 +347,14 @@ function addCustomSectionItem(sec: CustomSection) {
         </button>
       </div>
 
+      <!-- 拖拽积木提示条 -->
+      <div class="p-2.5 bg-primary-50/60 border border-primary-200 rounded-xl flex items-center justify-between text-xs text-primary-800">
+        <div class="flex items-center gap-2">
+          <span class="text-base">🏷️</span>
+          <span><strong>全新的标签积木化体验已就绪：</strong>您可以在左侧【标签积木池】直接按住任意标签拖入右侧 A4 纸张，或直接在纸上点击改字！</span>
+        </div>
+      </div>
+
       <!-- 头像照片快捷上传与 URL -->
       <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-4">
         <div class="w-16 h-20 bg-white border border-slate-300 rounded overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
