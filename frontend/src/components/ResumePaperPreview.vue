@@ -125,7 +125,7 @@ const activeHeaderChips = computed<ActiveTagChip[]>(() => {
   cfs.forEach((cf: any, idx: number) => {
     if (cf && (cf.label || cf.value)) {
       list.push({
-        id: `cf_${idx}`,
+        id: cf.id || `cf_${idx}`,
         kind: 'custom',
         key: `custom_${idx}`,
         label: cf.label || '自定义项',
@@ -134,6 +134,19 @@ const activeHeaderChips = computed<ActiveTagChip[]>(() => {
       })
     }
   })
+
+  // 如果有 tag_order，按自定义顺序排序
+  const order: string[] = Array.isArray(b.tag_order) ? b.tag_order : []
+  if (order.length > 0) {
+    list.sort((a, b) => {
+      const idxA = order.indexOf(a.id)
+      const idxB = order.indexOf(b.id)
+      if (idxA === -1 && idxB === -1) return 0
+      if (idxA === -1) return 1
+      if (idxB === -1) return -1
+      return idxA - idxB
+    })
+  }
 
   return list
 })
@@ -416,6 +429,61 @@ function finishEditField(fieldName: 'name' | 'label' | 'summary') {
   emit('change', 'basics')
 }
 
+function isLongChip(chip: ActiveTagChip): boolean {
+  if (['github', 'blog'].includes(chip.key)) return true
+  if (chip.value && chip.value.length > 28) return true
+  if (chip.value && (chip.value.startsWith('http://') || chip.value.startsWith('https://'))) return true
+  return false
+}
+
+const draggingChipId = ref<string | null>(null)
+
+function onChipDragStart(e: DragEvent, chip: ActiveTagChip) {
+  if (!props.editable) return
+  draggingChipId.value = chip.id
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'inner-chip', id: chip.id }))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function onChipDrop(e: DragEvent, targetChip: ActiveTagChip) {
+  if (!props.editable) return
+  e.preventDefault()
+  if (!draggingChipId.value || draggingChipId.value === targetChip.id) return
+
+  const srcId = draggingChipId.value
+  draggingChipId.value = null
+
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) rd.basics = {}
+
+  let order: string[] = Array.isArray(rd.basics.tag_order) && rd.basics.tag_order.length > 0
+    ? [...rd.basics.tag_order]
+    : activeHeaderChips.value.map((c) => c.id)
+
+  const srcIdx = order.indexOf(srcId)
+  const targetIdx = order.indexOf(targetChip.id)
+
+  if (srcIdx !== -1 && targetIdx !== -1) {
+    order.splice(srcIdx, 1)
+    order.splice(targetIdx, 0, srcId)
+  } else {
+    order = activeHeaderChips.value.map((c) => c.id)
+    const sI = order.indexOf(srcId)
+    const tI = order.indexOf(targetChip.id)
+    if (sI !== -1 && tI !== -1) {
+      order.splice(sI, 1)
+      order.splice(tI, 0, srcId)
+    }
+  }
+
+  rd.basics.tag_order = order
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
 defineExpose({
   applyTagToBasics,
 })
@@ -474,10 +542,10 @@ defineExpose({
           fontFamily: `-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`,
         }"
       >
-        <!-- ================= 1. Header (磁吸拖拽槽: 左求职与联系方式、中姓名、右头像) ================= -->
+        <!-- ================= 1. Header (严整对齐网格磁吸槽: 左侧姓名/意向/双列网格/总结 + 右侧证件照) ================= -->
         <header
           v-if="isSectionVisible('basics')"
-          class="header-section group/header relative pb-4 mb-4 border-b border-slate-100 transition-all rounded-xl p-2"
+          class="header-section group/header relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-2.5"
           :class="isHeaderDraggingOver ? 'bg-primary-50/70 ring-2 ring-dashed ring-primary-500 shadow-sm' : 'hover:bg-slate-50/40'"
           @dragover="handleHeaderDragOver"
           @dragleave="handleHeaderDragLeave"
@@ -486,104 +554,133 @@ defineExpose({
           <!-- 拖拽悬停吸附指示框 -->
           <div
             v-if="isHeaderDraggingOver"
-            class="absolute inset-0 bg-primary-50/80 backdrop-blur-2xs rounded-xl flex items-center justify-center z-30 pointer-events-none border-2 border-dashed border-primary-500 animate-pulse"
+            class="absolute inset-0 bg-primary-50/90 backdrop-blur-xs rounded-xl flex items-center justify-center z-30 pointer-events-none border-2 border-dashed border-primary-500 animate-pulse"
           >
-            <div class="px-4 py-2 bg-white rounded-xl shadow-md border border-primary-200 text-primary-700 font-bold text-xs flex items-center gap-2">
-              <span class="text-base">🎯</span>
-              <span>松开鼠标，将标签直接吸附至简历抬头</span>
+            <div class="px-5 py-2.5 bg-white rounded-xl shadow-lg border border-primary-200 text-primary-700 font-bold text-xs flex items-center gap-2">
+              <span class="text-xl">🎯</span>
+              <span>松开鼠标，将标签精准吸附至简历网格</span>
             </div>
           </div>
 
-          <div class="flex justify-between items-start gap-4">
-            <!-- 左侧求职意向与已上板的标签胶囊群 -->
-            <div class="header-left text-xs text-slate-700 space-y-2 pt-0.5 flex-1 min-w-[360px]">
-              <!-- 求职意向 (支持原地点击改字) -->
-              <div class="flex items-center gap-2">
-                <span class="text-slate-400 font-medium text-[11px]">👤 求职意向:</span>
-                <div v-if="editingField === 'label'" class="flex-1">
+          <!-- 头部主体：左侧信息区 (姓名+意向+双列对齐网格+总结) + 右侧证件照 -->
+          <div class="flex justify-between items-start gap-6">
+            <div class="flex-1 min-w-0 space-y-2.5">
+              <!-- 1. 姓名与求职意向 (置顶左对齐，层级分明) -->
+              <div class="flex items-baseline gap-3.5 flex-wrap">
+                <!-- 姓名 (支持原地点击改字) -->
+                <div v-if="editingField === 'name'" class="inline-block">
                   <input
-                    id="inline-field-label"
+                    id="inline-field-name"
                     v-model="editingFieldValue"
-                    class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 w-full bg-primary-50/30 rounded"
-                    @keydown.enter="finishEditField('label')"
-                    @blur="finishEditField('label')"
+                    class="text-3xl font-extrabold tracking-wider text-slate-950 font-sans border-b-2 border-primary-500 outline-none px-1 bg-primary-50/30 rounded"
+                    @keydown.enter="finishEditField('name')"
+                    @blur="finishEditField('name')"
                   />
                 </div>
-                <div
+                <h1
                   v-else
-                  class="group/title font-bold text-slate-900 cursor-pointer hover:text-primary-600 flex items-center gap-1 transition"
-                  title="点击直接原地修改意向头衔"
-                  @click="startEditField('label')"
+                  class="group/name text-3xl font-extrabold tracking-wider text-slate-950 font-sans cursor-pointer hover:text-primary-600 transition flex items-baseline gap-1"
+                  title="点击直接修改姓名"
+                  @click="startEditField('name')"
                 >
-                  <span>{{ basics.label || basics.title || '点击设置求职意向 (如：全栈开发工程师)' }}</span>
-                  <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition">✎</span>
+                  <span>{{ basics.name || '您的姓名' }}</span>
+                  <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition">✎</span>
+                </h1>
+
+                <!-- 求职意向 (头衔徽标) -->
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[11px] text-slate-400 font-medium">求职意向:</span>
+                  <div v-if="editingField === 'label'" class="inline-block">
+                    <input
+                      id="inline-field-label"
+                      v-model="editingFieldValue"
+                      class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 bg-primary-50/30 rounded"
+                      @keydown.enter="finishEditField('label')"
+                      @blur="finishEditField('label')"
+                    />
+                  </div>
+                  <div
+                    v-else
+                    class="group/title text-xs font-bold text-slate-800 cursor-pointer hover:text-primary-600 flex items-center gap-1 transition px-2 py-0.5 rounded bg-slate-100/90 border border-slate-200/90"
+                    title="点击直接原地修改意向头衔"
+                    @click="startEditField('label')"
+                  >
+                    <span>{{ basics.label || basics.title || '点击设置求职意向 (如：全栈开发工程师)' }}</span>
+                    <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition">✎</span>
+                  </div>
                 </div>
               </div>
 
-              <!-- 磁吸标签胶囊网格流 (已上板的所有联系与属性标签) -->
-              <div class="flex flex-wrap gap-1.5 pt-1">
+              <!-- 2. 严整的双列网格联系方式与属性 (对齐线笔直，短项占1格，长项跨2格) -->
+              <div class="grid grid-cols-2 gap-x-8 gap-y-1 text-xs text-slate-700 font-sans pt-0.5">
                 <div
                   v-for="chip in activeHeaderChips"
                   :key="chip.id"
-                  class="group/chip relative inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-sans transition-all"
-                  :style="{
-                    backgroundColor: themeStyles.primaryLight,
-                    borderColor: themeStyles.primaryBorder,
-                    color: themeStyles.textPrimary
-                  }"
+                  class="group/chip relative flex items-center justify-between gap-1.5 py-0.5 px-1.5 rounded transition-all hover:bg-slate-100/70"
+                  :class="isLongChip(chip) ? 'col-span-2' : 'col-span-1'"
+                  draggable="true"
+                  @dragstart="onChipDragStart($event, chip)"
+                  @dragover.prevent
+                  @drop="onChipDrop($event, chip)"
                 >
-                  <span class="text-xs shrink-0 select-none">{{ chip.icon }}</span>
-                  <span class="font-medium text-slate-500 text-[10px]">{{ chip.label }}:</span>
+                  <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span class="text-xs shrink-0 select-none opacity-85">{{ chip.icon }}</span>
+                    <span class="font-semibold text-slate-500 text-[11px] shrink-0">{{ chip.label }}:</span>
 
-                  <!-- 原地编辑输入框 -->
-                  <div v-if="editingChipId === chip.id" class="inline-block">
-                    <input
-                      :id="`inline-chip-input-${chip.id}`"
-                      v-model="editingChipValue"
-                      class="border-b border-primary-500 outline-none bg-white text-[11px] font-mono px-1 py-0 rounded text-slate-800"
-                      @keydown.enter="finishEditChip(chip)"
-                      @blur="finishEditChip(chip)"
-                    />
+                    <!-- 原地编辑输入框 -->
+                    <div v-if="editingChipId === chip.id" class="flex-1 min-w-0">
+                      <input
+                        :id="`inline-chip-input-${chip.id}`"
+                        v-model="editingChipValue"
+                        class="border-b border-primary-500 outline-none bg-white text-[11px] font-mono px-1 py-0.5 w-full rounded text-slate-900 shadow-2xs"
+                        @keydown.enter="finishEditChip(chip)"
+                        @blur="finishEditChip(chip)"
+                      />
+                    </div>
+
+                    <!-- 原地展示文本 (点击即编辑) -->
+                    <span
+                      v-else
+                      class="font-mono text-slate-800 text-[11px] truncate flex-1 cursor-pointer hover:text-primary-600 hover:underline"
+                      title="点击原地编辑内容"
+                      @click="startEditChip(chip)"
+                    >
+                      {{ chip.value }}
+                    </span>
                   </div>
-                  <!-- 原地展示文本 (点击即编辑) -->
-                  <span
-                    v-else
-                    class="font-mono font-medium truncate max-w-[200px] cursor-pointer hover:underline"
-                    title="点击原地编辑内容"
-                    @click="startEditChip(chip)"
-                  >
-                    {{ chip.value }}
-                  </span>
 
-                  <!-- 移出标签快捷按钮 (x) -->
-                  <button
-                    v-if="editable"
-                    class="ml-0.5 text-slate-400 hover:text-red-600 text-xs font-bold leading-none opacity-0 group-hover/chip:opacity-100 transition"
-                    title="移出此标签"
-                    @click="removeTagFromHeader(chip, $event)"
-                  >
-                    ×
-                  </button>
+                  <!-- 移出标签快捷按钮 (x) & 拖动手柄 -->
+                  <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover/chip:opacity-100 transition">
+                    <span class="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 text-xs px-0.5 select-none" title="按住拖拽互换顺序">⠿</span>
+                    <button
+                      v-if="editable"
+                      class="text-slate-400 hover:text-red-600 text-xs font-bold leading-none px-0.5"
+                      title="移出此标签"
+                      @click="removeTagFromHeader(chip, $event)"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
 
                 <!-- 空态吸附提示 (当没有任何标签时) -->
                 <div
                   v-if="!activeHeaderChips.length"
-                  class="px-2.5 py-1 rounded-md border border-dashed border-slate-300 text-slate-400 text-[11px] flex items-center gap-1.5 bg-slate-50/50"
+                  class="col-span-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 text-slate-400 text-xs flex items-center justify-center gap-2 bg-slate-50/60"
                 >
                   <span>🏷️</span>
-                  <span>从左侧积木池拖入手机、微信、期望薪资等标签</span>
+                  <span>从左侧积木池拖入手机、微信、期望薪资等标签，将在此自动形成严整双列对齐网格</span>
                 </div>
               </div>
 
-              <!-- 一句话总结 (支持原地点击改字) -->
-              <div class="pt-1">
+              <!-- 3. 一句话优势 / 自我总结 (通栏对齐) -->
+              <div class="pt-1 border-t border-slate-100">
                 <div v-if="editingField === 'summary'">
                   <textarea
                     id="inline-field-summary"
                     v-model="editingFieldValue"
                     rows="2"
-                    class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1 outline-none bg-primary-50/20"
+                    class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1.5 outline-none bg-primary-50/20"
                     @keydown.enter.ctrl="finishEditField('summary')"
                     @blur="finishEditField('summary')"
                   />
@@ -591,40 +688,19 @@ defineExpose({
                 </div>
                 <p
                   v-else
-                  class="group/summary text-xs text-slate-600 leading-relaxed max-w-[440px] cursor-pointer hover:text-slate-900 transition flex items-start gap-1"
-                  title="点击原地修改个人总结"
+                  class="group/summary text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900 transition flex items-start gap-1"
+                  title="点击原地修改个人技术特长与优势总结"
                   @click="startEditField('summary')"
                 >
-                  <span class="flex-1">{{ basics.summary || '点击输入一句话个人技术特长与综合优势…' }}</span>
+                  <span class="flex-1">{{ basics.summary || '点击输入一句话个人核心技术特长与综合优势总结…' }}</span>
                   <span class="text-[10px] text-slate-300 group-hover/summary:text-primary-500 opacity-0 group-hover/summary:opacity-100 transition shrink-0">✎</span>
                 </p>
               </div>
             </div>
 
-            <!-- 中部大姓名 + 右侧证件照 -->
-            <div class="header-right flex items-center gap-4 shrink-0">
-              <!-- 姓名 (支持原地点击改字) -->
-              <div v-if="editingField === 'name'">
-                <input
-                  id="inline-field-name"
-                  v-model="editingFieldValue"
-                  class="text-2xl font-extrabold tracking-wider text-slate-950 font-sans border-b border-primary-500 outline-none px-1 bg-primary-50/30 rounded"
-                  @keydown.enter="finishEditField('name')"
-                  @blur="finishEditField('name')"
-                />
-              </div>
-              <h1
-                v-else
-                class="group/name text-3xl font-extrabold tracking-wider text-slate-950 font-sans cursor-pointer hover:text-primary-600 transition flex items-center gap-1"
-                title="点击直接修改姓名"
-                @click="startEditField('name')"
-              >
-                <span>{{ basics.name || '您的姓名' }}</span>
-                <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition">✎</span>
-              </h1>
-
-              <!-- 免冠头像照片 -->
-              <div class="w-[74px] h-[98px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
+            <!-- 右侧免冠证件照 -->
+            <div class="shrink-0 flex flex-col items-center justify-start pt-1">
+              <div class="w-[82px] h-[108px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
                 <img
                   v-if="basics.photo || basics.avatar"
                   :src="basics.photo || basics.avatar"
