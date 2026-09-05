@@ -1030,7 +1030,7 @@ async function doFinalize() {
 </script>
 
 <template>
-  <div class="w-full max-w-[1720px] mx-auto transition-all duration-300">
+  <div class="w-full max-w-[1720px] mx-auto h-full flex-1 min-h-0 flex flex-col transition-all duration-300">
     <!-- 历史草稿抽屉 -->
     <div v-if="showHistory" class="fixed inset-0 z-50 bg-black/40 flex justify-end">
       <div class="bg-white w-full max-w-md h-full shadow-2xl flex flex-col">
@@ -1090,14 +1090,14 @@ async function doFinalize() {
       </div>
     </div>
 
-    <div v-if="error" class="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{{ error }}</div>
-    <div v-if="successMsg" class="mb-3 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{{ successMsg }}</div>
+    <div v-if="error" class="shrink-0 mb-2 p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">{{ error }}</div>
+    <div v-if="successMsg" class="shrink-0 mb-2 p-2.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs">{{ successMsg }}</div>
 
     <!-- 简历沉浸式微调工作台 (直接进入，无冗余向导流程) -->
-    <div class="space-y-3">
+    <div class="flex-1 min-h-0 flex flex-col space-y-2.5">
       
       <!-- 顶部主操作条 -->
-      <div class="flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs">
+      <div class="shrink-0 flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-2xs">
         <div class="flex items-center gap-2 sm:gap-3">
           <!-- 侧边栏展开/收起切换按钮 -->
           <button
@@ -1290,12 +1290,11 @@ async function doFinalize() {
         </div>
       </div>
 
-      <!-- Magic-Resume 三栏工作台主体 (支持左右自由拖拽调整宽度) -->
+      <!-- Magic-Resume 三栏工作台主体 (支持左右自由拖拽调整宽度，全视口高度拉满) -->
       <div
         ref="workbenchContainerRef"
-        class="relative flex flex-col lg:flex-row items-stretch w-full overflow-hidden transition-all duration-300"
+        class="relative flex-1 min-h-0 h-[calc(100vh-84px)] min-h-[580px] flex flex-col lg:flex-row items-stretch w-full overflow-hidden transition-all duration-300"
         :class="[
-          isTopHeaderCollapsed ? 'h-[calc(100vh-90px)] min-h-[680px]' : 'h-[calc(100vh-210px)] min-h-[640px]',
           isDragging ? 'select-none cursor-col-resize' : ''
         ]"
       >
@@ -1303,13 +1302,13 @@ async function doFinalize() {
         <!-- 左栏: 模块导航与排版外观 (SidePanel) -->
         <div
           v-show="!isSidePanelCollapsed"
-          class="w-full flex flex-col gap-3 overflow-hidden shrink-0"
+          class="w-full flex flex-col gap-2.5 overflow-hidden shrink-0 h-full"
           :class="isDragging ? 'transition-none' : 'transition-[width] duration-150'"
           :style="isDesktop ? { width: `${leftPercent}%`, minWidth: '200px', maxWidth: '420px' } : {}"
         >
           
           <!-- 模块编排卡片 -->
-          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex-1 flex flex-col overflow-hidden">
+          <div class="bg-white rounded-xl border border-slate-200 p-3 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
             <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 shrink-0">
               <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <span>📐</span> 模块编排
@@ -1443,7 +1442,7 @@ async function doFinalize() {
 
         <!-- 中栏: 模块编辑表单 (EditPanel) -->
         <div
-          class="w-full bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden shadow-2xs shrink-0"
+          class="w-full bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden shadow-2xs shrink-0 h-full"
           :class="isDragging ? 'transition-none' : 'transition-[width] duration-150'"
           :style="isDesktop ? {
             width: isSidePanelCollapsed ? `${collapsedCenterPercent}%` : `${centerPercent}%`,
@@ -1519,7 +1518,7 @@ async function doFinalize() {
 
         <!-- 右栏: 实时 A4 纸张画布预览 (PreviewPanel) -->
         <div
-          class="w-full bg-slate-100 rounded-xl border border-slate-200 flex flex-col overflow-hidden shadow-inner flex-1 min-w-[320px]"
+          class="w-full bg-slate-100 rounded-xl border border-slate-200 flex flex-col overflow-hidden shadow-inner flex-1 min-w-[320px] h-full"
           :class="isDragging ? 'pointer-events-none select-none' : ''"
         >
           <div class="px-3 py-2 border-b border-slate-200 bg-white/90 flex items-center justify-between text-xs text-slate-500 shrink-0">

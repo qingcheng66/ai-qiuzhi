@@ -109,7 +109,7 @@ onMounted(() => {
     </aside>
 
     <!-- 主内容 -->
-    <main class="flex-1 overflow-y-auto p-4 sm:p-5 transition-all duration-300">
+    <main class="flex-1 min-h-0 flex flex-col overflow-y-auto p-3 sm:p-4 transition-all duration-300">
       <RouterView />
     </main>
   </div>
