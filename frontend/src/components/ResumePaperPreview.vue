@@ -163,7 +163,7 @@ const basics = computed(() => props.resumeData?.basics || {})
 // 计算当前画板上的 2D 坐标网格组件列表（支持持久化或从 basics 智能推导）
 const active2DWidgets = computed<Header2DWidget[]>(() => {
   const b = basics.value
-  if (Array.isArray(b.grid_widgets_2d) && b.grid_widgets_2d.length > 0) {
+  if (Array.isArray(b.grid_widgets_2d)) {
     return b.grid_widgets_2d
   }
 
@@ -587,11 +587,20 @@ function promptEditPhoto(widget: Header2DWidget) {
 }
 
 // 2D 网格拖拽开始
+// 2D 网格拖拽开始
 function onWidgetDragStart(e: DragEvent, widget: Header2DWidget) {
   if (!props.editable) return
   draggingWidgetId.value = widget.id
   draggingDimensions.value = { w: widget.w, h: widget.h }
   hoverCell.value = { col: widget.col, row: widget.row }
+
+  try {
+    ;(window as any).__AGY_DRAGGING_TAG__ = {
+      id: widget.id,
+      w: widget.w,
+      h: widget.h,
+    }
+  } catch {}
 
   if (e.dataTransfer) {
     e.dataTransfer.setData('application/json', JSON.stringify({
@@ -600,7 +609,7 @@ function onWidgetDragStart(e: DragEvent, widget: Header2DWidget) {
       w: widget.w,
       h: widget.h,
     }))
-    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.effectAllowed = 'all'
   }
 }
 
@@ -609,22 +618,33 @@ function onHeaderDragOver(e: DragEvent) {
   if (!props.editable) return
   e.preventDefault()
   if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.dropEffect = 'copy'
   }
   isHeaderDraggingOver.value = true
+
+  // 读取全局拖拽的组件尺寸（如果有）
+  try {
+    const globalTag = (window as any).__AGY_DRAGGING_TAG__
+    if (globalTag && globalTag.w && globalTag.h) {
+      draggingDimensions.value = { w: globalTag.w, h: globalTag.h }
+    }
+  } catch {}
 
   const container = headerContainerRef.value
   if (!container) return
 
   const rect = container.getBoundingClientRect()
-  const paddingX = 16
-  const paddingTop = 14
+  // 核心：必须考虑 A4 缩放比例 currentScale，反求真实的 100% 原始像素
+  const scale = currentScale.value || 1
+  const paddingX = 12
+  const paddingTop = 12
   const gap = 8
 
-  const mouseX = Math.max(0, e.clientX - rect.left - paddingX)
-  const mouseY = Math.max(0, e.clientY - rect.top - paddingTop)
+  const mouseX = Math.max(0, (e.clientX - rect.left) / scale - paddingX)
+  const mouseY = Math.max(0, (e.clientY - rect.top) / scale - paddingTop)
 
-  const availableWidth = rect.width - paddingX * 2
+  const unscaledContainerWidth = rect.width / scale
+  const availableWidth = Math.max(100, unscaledContainerWidth - paddingX * 2)
   const colWidth = (availableWidth - (TOTAL_COLS - 1) * gap) / TOTAL_COLS
   const rowHeightWithGap = BASE_ROW_HEIGHT + gap
 
@@ -734,27 +754,36 @@ function placeNewWidget(data: any, col: number, row: number) {
 // 供父组件直接调用
 function applyTagToBasics(tag: any) {
   // 找一个靠下的空行放置
-  const nextRow = totalGridRows.value - 2
+  const nextRow = Math.max(1, totalGridRows.value - 2)
+  const widgetType = tag.type || (tag.category === 'core' ? tag.key : 'tag')
   placeNewWidget(
     {
       id: tag.id,
-      widgetType: tag.type || (tag.category === 'core' ? tag.key : 'tag'),
+      widgetType,
       key: tag.key || 'custom',
       label: tag.label,
       value: tag.value,
       icon: tag.icon,
-      w: tag.defaultCols || 4,
+      w: tag.defaultCols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4),
       h: tag.type === 'photo' ? 3 : tag.type === 'summary' ? 2 : 1,
       category: tag.category,
       isCustom: tag.isCustom,
     },
     1,
-    Math.max(1, nextRow)
+    nextRow
   )
+}
+
+function removeTagFromBasics(tag: any) {
+  const current = active2DWidgets.value.filter(
+    (w) => w.id !== tag.id && (!tag.key || w.key !== tag.key || tag.key === 'custom') && w.label !== tag.label
+  )
+  update2DWidgets(current)
 }
 
 defineExpose({
   applyTagToBasics,
+  removeTagFromBasics,
 })
 </script>
 
@@ -815,7 +844,10 @@ defineExpose({
         <header
           v-if="isSectionVisible('basics')"
           ref="headerContainerRef"
-          class="header-section relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-3 select-text min-h-[160px]"
+          class="header-section relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-3 select-text"
+          :style="{
+            minHeight: isDraggingActive ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) + 24}px` : '150px',
+          }"
           :class="{
             'ring-2 ring-primary-500 ring-dashed bg-primary-50/20 shadow-sm': isDraggingActive,
             'hover:bg-slate-50/30': !isDraggingActive,
@@ -827,8 +859,11 @@ defineExpose({
           <!-- 只有在拖拽时才点亮的无限二维方格纸阵列 (平时 100% 彻底隐形，拖动时显示全量矩阵方格) -->
           <div
             v-if="isDraggingActive"
-            class="pointer-events-none absolute inset-0 z-10 grid grid-cols-12 gap-2 p-3 transition-all duration-200"
-            :style="{ gridAutoRows: `${BASE_ROW_HEIGHT}px` }"
+            class="pointer-events-none absolute inset-x-3 top-3 z-10 grid grid-cols-12 gap-2 transition-all duration-200"
+            :style="{
+              gridAutoRows: `${BASE_ROW_HEIGHT}px`,
+              height: `${totalGridRows * (BASE_ROW_HEIGHT + 8) - 8}px`,
+            }"
           >
             <div v-for="r in totalGridRows" :key="`r-${r}`" style="display: contents">
               <div
@@ -860,7 +895,10 @@ defineExpose({
           <!-- 二维坐标网格核心组件排版 (真实自由坐标渲染) -->
           <div
             class="relative z-20 grid grid-cols-12 gap-2 items-stretch"
-            :style="{ gridAutoRows: `${BASE_ROW_HEIGHT}px` }"
+            :style="{
+              gridAutoRows: `${BASE_ROW_HEIGHT}px`,
+              minHeight: isDraggingActive ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) - 8}px` : undefined,
+            }"
           >
             <div
               v-for="widget in active2DWidgets"

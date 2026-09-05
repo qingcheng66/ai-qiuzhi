@@ -85,6 +85,18 @@ const allAvailableTags = computed(() => {
 // 检查某个标签当前是否已经在简历画板上
 function isTagOnCanvas(tag: TagItem): boolean {
   const b = props.resumeData?.basics || {}
+
+  // 1. 优先检查二维 2D 网格画板
+  if (Array.isArray(b.grid_widgets_2d)) {
+    return b.grid_widgets_2d.some((w: any) =>
+      w.id === tag.id ||
+      (tag.key && w.key === tag.key && tag.key !== 'custom') ||
+      (tag.type && w.type === tag.type && w.type !== 'tag') ||
+      w.label === tag.label
+    )
+  }
+
+  // 2. 兼容检查一维栅格
   const gw: any[] = Array.isArray(b.grid_widgets) ? b.grid_widgets : []
   if (gw.length > 0) {
     return gw.some((w: any) =>
@@ -95,7 +107,7 @@ function isTagOnCanvas(tag: TagItem): boolean {
     )
   }
 
-  // 传统兼容性判定
+  // 3. 传统兼容性判定
   if (tag.id === 'core_name' || tag.type === 'name') return Boolean(b.name)
   if (tag.id === 'core_label' || tag.type === 'label') return Boolean(b.label || b.title)
   if (tag.id === 'core_photo' || tag.type === 'photo') return Boolean(b.photo || b.avatar)
@@ -107,26 +119,39 @@ function isTagOnCanvas(tag: TagItem): boolean {
   return cfs.some((cf: any) => cf.label === tag.label)
 }
 
-// 拖拽开始：设置 HTML5 Drag 数据，并携带推荐网格跨度
+// 拖拽开始：设置 HTML5 Drag 数据，并携带推荐二维网格跨度
 function onDragStart(e: DragEvent, tag: TagItem) {
   if (!e.dataTransfer) return
+  const widgetType = tag.type || (tag.category === 'core' ? tag.key : 'tag')
+  const w = tag.defaultCols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4)
+  const h = tag.type === 'photo' ? 3 : tag.type === 'summary' ? 2 : 1
+
+  const tagData = {
+    id: tag.id,
+    widgetType,
+    key: tag.key || 'custom',
+    label: tag.label,
+    value: tag.value,
+    icon: tag.icon,
+    cols: w,
+    w,
+    h,
+    category: tag.category,
+    isCustom: tag.isCustom,
+  }
+
+  // 全局共享拖拽元数据，让画布在 dragover 时即可无障碍读取高精度尺寸
+  try {
+    ;(window as any).__AGY_DRAGGING_TAG__ = tagData
+  } catch {}
+
   const payload = {
     type: 'grid-widget',
-    data: {
-      id: tag.id,
-      widgetType: tag.type || (tag.category === 'core' ? tag.key : 'tag'),
-      key: tag.key || 'custom',
-      label: tag.label,
-      value: tag.value,
-      icon: tag.icon,
-      cols: tag.defaultCols || 4,
-      category: tag.category,
-      isCustom: tag.isCustom,
-    },
+    data: tagData,
   }
   e.dataTransfer.setData('application/json', JSON.stringify(payload))
   e.dataTransfer.setData('text/plain', tag.label)
-  e.dataTransfer.effectAllowed = 'copy'
+  e.dataTransfer.effectAllowed = 'all'
 
   const el = e.target as HTMLElement
   if (el) {
@@ -135,6 +160,9 @@ function onDragStart(e: DragEvent, tag: TagItem) {
 }
 
 function onDragEnd(e: DragEvent) {
+  try {
+    ;(window as any).__AGY_DRAGGING_TAG__ = null
+  } catch {}
   const el = e.target as HTMLElement
   if (el) {
     el.classList.remove('opacity-50')
@@ -178,6 +206,8 @@ function onPaletteDrop(e: DragEvent) {
     if (payload.type === 'inner-chip' && payload.id) {
       emit('remove-tag', { id: payload.id, label: '' } as any)
     } else if (payload.type === 'grid-widget-move' && payload.id) {
+      emit('remove-tag', { id: payload.id, label: '' } as any)
+    } else if (payload.type === '2d-widget-move' && payload.id) {
       emit('remove-tag', { id: payload.id, label: '' } as any)
     }
   } catch (err) {

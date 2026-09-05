@@ -9,34 +9,49 @@ import CompanyPositionSelector from '@/components/CompanyPositionSelector.vue'
 import JdAiCopilotDrawer from '@/components/JdAiCopilotDrawer.vue'
 
 const leftPanelMode = ref<'palette' | 'outline'>('palette')
+const paperPreviewRef = ref<any>(null)
 
 function handleAddTagFromPalette(tag: any) {
+  if (paperPreviewRef.value?.applyTagToBasics) {
+    paperPreviewRef.value.applyTagToBasics(tag)
+    triggerAutoSave()
+    return
+  }
+
   if (!resume.value) return
   if (!resume.value.basics) resume.value.basics = {}
   const b = resume.value.basics
 
   const widgetType = tag.type || (tag.category === 'core' ? tag.key : 'tag')
-  const newWidget = {
+  const w = tag.defaultCols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4)
+  const h = widgetType === 'photo' ? 3 : widgetType === 'summary' ? 2 : 1
+
+  if (!Array.isArray(b.grid_widgets_2d)) {
+    b.grid_widgets_2d = []
+  }
+
+  const existingIdx2D = b.grid_widgets_2d.findIndex((item: any) =>
+    item.id === tag.id || (tag.key && item.key === tag.key && tag.key !== 'custom')
+  )
+
+  const new2DWidget = {
     id: tag.id || `widget_${Date.now()}`,
     type: widgetType,
     key: tag.key || 'custom',
     label: tag.label,
     value: tag.value || '',
     icon: tag.icon || '🏷️',
-    cols: tag.defaultCols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4),
+    col: 1,
+    row: Math.max(1, b.grid_widgets_2d.length + 1),
+    w,
+    h,
     isCustom: tag.category === 'custom' || tag.isCustom,
   }
 
-  if (!Array.isArray(b.grid_widgets)) {
-    b.grid_widgets = []
-  }
-  const existingIdx = b.grid_widgets.findIndex((w: any) =>
-    w.id === tag.id || (tag.key && w.key === tag.key && tag.key !== 'custom') || (widgetType && w.type === widgetType && widgetType !== 'tag')
-  )
-  if (existingIdx !== -1) {
-    b.grid_widgets[existingIdx] = { ...b.grid_widgets[existingIdx], ...newWidget }
+  if (existingIdx2D !== -1) {
+    b.grid_widgets_2d[existingIdx2D] = { ...b.grid_widgets_2d[existingIdx2D], ...new2DWidget }
   } else {
-    b.grid_widgets.push(newWidget)
+    b.grid_widgets_2d.push(new2DWidget)
   }
 
   // 同步基础字段
@@ -65,7 +80,11 @@ function handleAddTagFromPalette(tag: any) {
           label: tag.label,
           value: tag.value || '点击编辑内容',
           icon: tag.icon || '🏷️',
-          cols: tag.defaultCols || 4,
+          col: 1,
+          row: 1,
+          w,
+          h: 1,
+          cols: w,
         })
       }
     }
@@ -75,11 +94,17 @@ function handleAddTagFromPalette(tag: any) {
 }
 
 function handleRemoveTagFromPalette(tag: any) {
+  if (paperPreviewRef.value?.removeTagFromBasics) {
+    paperPreviewRef.value.removeTagFromBasics(tag)
+    triggerAutoSave()
+    return
+  }
+
   if (!resume.value || !resume.value.basics) return
   const b = resume.value.basics
 
-  if (Array.isArray(b.grid_widgets)) {
-    b.grid_widgets = b.grid_widgets.filter((w: any) =>
+  if (Array.isArray(b.grid_widgets_2d)) {
+    b.grid_widgets_2d = b.grid_widgets_2d.filter((w: any) =>
       w.id !== tag.id &&
       (!tag.key || w.key !== tag.key || tag.key === 'custom') &&
       (!tag.type || w.type !== tag.type || tag.type === 'tag') &&
@@ -116,10 +141,6 @@ function handleRemoveTagFromPalette(tag: any) {
         b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
       }
     }
-  }
-
-  if (Array.isArray(b.tag_order) && tag.id) {
-    b.tag_order = b.tag_order.filter((id: string) => id !== tag.id)
   }
 
   triggerAutoSave()
@@ -1718,6 +1739,7 @@ async function doFinalize() {
             <!-- 0ms 纯响应式实时纸张画布 -->
             <ResumePaperPreview
               v-if="previewMode === 'live' && resume"
+              ref="paperPreviewRef"
               :resume-data="resume"
               :scale="previewScale"
               :theme-color="resumeThemeColor"
