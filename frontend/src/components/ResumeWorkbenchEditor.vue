@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 
 export interface CustomField {
   label: string
@@ -86,15 +86,32 @@ function initLocal(val: any) {
   if (!localResume.value.basics) localResume.value.basics = {}
   if (!localResume.value.basics.custom_fields) localResume.value.basics.custom_fields = []
   if (!Array.isArray(localResume.value.education)) localResume.value.education = []
-  if (!Array.isArray(localResume.value.skills) && typeof localResume.value.skills !== 'string') {
+  if (typeof localResume.value.skills === 'string') {
+    localResume.value.skills = localResume.value.skills
+      .split('\n')
+      .map((l: string) => l.trim())
+      .filter(Boolean)
+  } else if (Array.isArray(localResume.value.skills)) {
+    localResume.value.skills = localResume.value.skills
+      .map((item: any) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          if (Array.isArray(item.keywords) && item.keywords.length > 0) {
+            return `${item.name ? item.name + '：' : ''}${item.keywords.join('、')}`
+          }
+          return item.name || ''
+        }
+        return String(item || '')
+      })
+      .filter(Boolean)
+  } else {
     localResume.value.skills = []
   }
   if (!Array.isArray(localResume.value.projects)) localResume.value.projects = []
   if (!Array.isArray(localResume.value.experience)) localResume.value.experience = []
   if (!Array.isArray(localResume.value.highlights)) localResume.value.highlights = []
   if (!Array.isArray(localResume.value.custom_sections)) localResume.value.custom_sections = []
-
-  syncSkillTextFromResume()
+  localResume.value.skillContent = localResume.value.skills.join('\n')
 }
 
 watch(
@@ -130,92 +147,64 @@ function triggerChange(secName: string) {
   emit('change', secName, localResume.value[secName])
 }
 
-// ---------------- 技能即刻 0ms 联动 ----------------
-function handleSkillTextInput(e: Event) {
-  const target = e.target as HTMLTextAreaElement
-  const val = target.value
-  skillText.value = val
-  localResume.value.skillContent = val
-  // 将文本同步拆分为每行数组供后端与模板解析
-  const lines = val.split('\n').map((l) => l.trim()).filter(Boolean)
-  localResume.value.skills = lines
+// ---------------- 极简专业技能条目管理 ----------------
+function onSkillItemInput(idx: number) {
+  localResume.value.skillContent = (localResume.value.skills || []).join('\n')
   triggerChange('skills')
 }
 
-// 技能快捷插入格式
-function insertSkillPrefix(prefix: string) {
-  if (prefix === 'numbered') {
-    const lines = skillText.value.split('\n')
-    let num = 1
-    const newLines = lines.map((l) => {
-      const stripped = l.replace(/^\d+[\.、]\s*/, '').trim()
-      if (!stripped) return l
-      return `${num++}. ${stripped}`
-    })
-    skillText.value = newLines.join('\n')
-  } else if (prefix === 'bullet') {
-    const lines = skillText.value.split('\n')
-    const newLines = lines.map((l) => {
-      const stripped = l.replace(/^[•\-\*]\s*/, '').trim()
-      if (!stripped) return l
-      return `• ${stripped}`
-    })
-    skillText.value = newLines.join('\n')
-  } else if (prefix === 'bold') {
-    skillText.value += '\n【核心领域】: 深入掌握 ...'
-  } else if (prefix === 'demo') {
-    skillText.value = [
-      '1. 双 Agent 工作流: 熟练设计 LangGraph / Multi-Agent 协作架构，擅长复杂任务规划、上下文剪枝与工具路由；',
-      '2. 全栈架构研发: 深入掌握 Python (FastAPI, SQLAlchemy) 与 前端工程化 (Vue 3, TypeScript, Vite, Tailwind)；',
-      '3. 检索增强 (RAG): 深入掌握向量检索 (Chroma / FAISS) 与 混合重排 (Re-rank) 算法，具备高质量知识库调优经验；',
-      '4. 模型微调与部署: 熟悉 LLaMA-Factory / vLLM 高并发推理优化，具备端到端生产部署落地能力。'
-    ].join('\n')
-  } else if (prefix === 'clear') {
-    skillText.value = ''
+function addSkillItem(atIdx?: number | Event) {
+  if (!Array.isArray(localResume.value.skills)) localResume.value.skills = []
+  const insertIdx = typeof atIdx === 'number' ? atIdx : -1
+  if (insertIdx >= 0) {
+    localResume.value.skills.splice(insertIdx + 1, 0, '')
+  } else {
+    localResume.value.skills.push('')
   }
-  localResume.value.skillContent = skillText.value
-  localResume.value.skills = skillText.value.split('\n').map((l) => l.trim()).filter(Boolean)
+  localResume.value.skillContent = localResume.value.skills.join('\n')
   triggerChange('skills')
+  nextTick(() => {
+    const nextIdx = insertIdx >= 0 ? insertIdx + 1 : localResume.value.skills.length - 1
+    const el = document.getElementById(`skill-input-${nextIdx}`)
+    el?.focus()
+  })
 }
 
-// 标签模式相关
-const skillInputs = ref<Record<number, string>>({})
-
-function handleAddKeyword(idx: number) {
-  const kw = (skillInputs.value[idx] || '').trim()
-  if (!kw) return
-  if (!Array.isArray(localResume.value.skills)) {
-    localResume.value.skills = []
-  }
-  if (!localResume.value.skills[idx] || typeof localResume.value.skills[idx] !== 'object') {
-    localResume.value.skills[idx] = { name: '技能分类', keywords: [] }
-  }
-  if (!localResume.value.skills[idx].keywords) {
-    localResume.value.skills[idx].keywords = []
-  }
-  localResume.value.skills[idx].keywords.push(kw)
-  skillInputs.value[idx] = ''
-  syncSkillTextFromResume()
-  triggerChange('skills')
-}
-
-function removeKeyword(group: any, ki: number) {
-  group.keywords.splice(ki, 1)
-  syncSkillTextFromResume()
-  triggerChange('skills')
-}
-
-function addSkillGroup() {
-  if (!Array.isArray(localResume.value.skills)) {
-    localResume.value.skills = []
-  }
-  localResume.value.skills.push({ name: '新技能分类', keywords: [] })
-  triggerChange('skills')
-}
-
-function removeSkillGroup(idx: number) {
+function removeSkillItem(idx: number) {
+  if (!Array.isArray(localResume.value.skills)) return
   localResume.value.skills.splice(idx, 1)
-  syncSkillTextFromResume()
+  localResume.value.skillContent = localResume.value.skills.join('\n')
+  triggerChange('skills')
+}
+
+function moveSkillItem(idx: number, direction: -1 | 1) {
+  if (!Array.isArray(localResume.value.skills)) return
+  const targetIdx = idx + direction
+  if (targetIdx < 0 || targetIdx >= localResume.value.skills.length) return
+  const item = localResume.value.skills.splice(idx, 1)[0]
+  localResume.value.skills.splice(targetIdx, 0, item)
+  localResume.value.skillContent = localResume.value.skills.join('\n')
+  triggerChange('skills')
+}
+
+function handleSkillEnter(e: KeyboardEvent, idx: number) {
+  addSkillItem(idx)
+}
+
+function loadSampleSkills() {
+  localResume.value.skills = [
+    '全栈架构研发: 深入掌握 Python (FastAPI, SQLAlchemy) 与 前端工程化 (Vue 3, TypeScript, Vite, Tailwind)；',
+    '双 Agent 协作流: 熟练设计 LangGraph / Multi-Agent 协作架构，擅长复杂任务规划、上下文剪枝与动态工具路由；',
+    '检索增强 (RAG): 深入掌握向量检索 (Chroma / FAISS) 与 混合重排 (Re-rank) 算法，具备高质量知识库调优经验；',
+    '工程化与部署: 熟练掌握 Docker 容器编排、CI/CD 自动化流水线，具备高并发生产环境性能调优与故障排查经验。'
+  ]
+  localResume.value.skillContent = localResume.value.skills.join('\n')
+  triggerChange('skills')
+}
+
+function clearAllSkills() {
+  localResume.value.skills = []
+  localResume.value.skillContent = ''
   triggerChange('skills')
 }
 
@@ -661,134 +650,125 @@ function addCustomSectionItem(sec: CustomSection) {
     </div>
 
 
-    <!-- ===================== 2. 专业技能 (0ms 即刻打字同步 + Magic-Resume 模式) ===================== -->
-    <div v-else-if="activeSection === 'skills'" class="space-y-4">
+    <!-- ===================== 2. 专业技能 (极简条目列表流) ===================== -->
+    <div v-else-if="activeSection === 'skills'" class="space-y-3">
+      <!-- 头部：标题与单一主操作按钮 -->
       <div class="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
           <h4 class="font-bold text-base text-slate-800 flex items-center gap-2">
             <span>⚡</span> 专业技能
           </h4>
-          <p class="text-xs text-slate-400 mt-0.5">即刻打字实时渲染在右侧 A4 纸质区域，支持 1. 2. 3. 编号加粗</p>
+          <p class="text-xs text-slate-400 mt-0.5">每项代表一个专业技术领域，右侧自动高保真加粗排版</p>
         </div>
         <div class="flex items-center gap-2">
-          <!-- 模式切换 -->
-          <div class="flex p-0.5 bg-slate-100 rounded-lg text-xs">
-            <button
-              class="px-2.5 py-1 rounded-md transition font-medium"
-              :class="skillMode === 'text' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
-              @click="skillMode = 'text'"
-            >
-              📝 自由多行文本 (推荐)
-            </button>
-            <button
-              class="px-2.5 py-1 rounded-md transition font-medium"
-              :class="skillMode === 'tags' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
-              @click="skillMode = 'tags'"
-            >
-              🏷️ 分类标签卡片
-            </button>
-          </div>
-
           <button
-            class="btn-secondary !text-xs !py-1.5 flex items-center gap-1 text-primary-600 border-primary-200 bg-primary-50/50"
+            class="btn-secondary !text-xs !py-1.5 flex items-center gap-1.5 text-primary-600 border-primary-200 bg-primary-50/50 hover:bg-primary-50"
             :disabled="loadingSection === 'skills'"
             @click="emit('regenerate', 'skills')"
           >
-            <span>✨</span> {{ loadingSection === 'skills' ? '对齐中…' : 'AI 针对 JD 优化技能' }}
+            <span>✨</span> {{ loadingSection === 'skills' ? '对齐中…' : 'AI 针对 JD 优化' }}
           </button>
+
+          <!-- 极简轻量下拉菜单 (载入示例 / 清空) -->
+          <div class="relative group/more">
+            <button
+              class="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition text-xs font-bold"
+              title="更多操作"
+            >
+              ···
+            </button>
+            <div class="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl shadow-lg py-1 w-36 hidden group-hover/more:block z-30 text-xs">
+              <button class="w-full text-left px-3 py-1.5 hover:bg-slate-50 text-slate-700 flex items-center gap-1.5" @click="loadSampleSkills">
+                <span>💡</span> 载入高质范例
+              </button>
+              <div class="my-1 border-t border-slate-100"></div>
+              <button class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-1.5" @click="clearAllSkills">
+                <span>🗑️</span> 清空所有条目
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- 模式 1: 自由多行文本编辑器 (Magic-Resume 核心标准，0ms 响应) -->
-      <div v-if="skillMode === 'text'" class="space-y-2.5">
-        <!-- 快速格式化工具栏 -->
-        <div class="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-slate-400 text-[11px] mr-1">快捷排版:</span>
+      <!-- 技能条目列表流：极简条目，输入框即输入，回车即新建 -->
+      <div class="space-y-2">
+        <div
+          v-for="(skill, idx) in localResume.skills"
+          :key="idx"
+          class="group flex items-start gap-2.5 p-2 rounded-xl bg-white border border-slate-200/90 hover:border-primary-300 hover:shadow-2xs transition"
+        >
+          <!-- 序号胶囊 -->
+          <div class="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-mono font-bold shrink-0 mt-0.5 select-none group-hover:bg-primary-50 group-hover:text-primary-700 transition">
+            {{ idx + 1 }}
+          </div>
+
+          <!-- 技能内容输入框 (Textarea 舒适双行自适应) -->
+          <div class="flex-1 min-w-0">
+            <textarea
+              :id="`skill-input-${idx}`"
+              v-model="localResume.skills[idx]"
+              @input="onSkillItemInput(idx)"
+              @keydown.enter.prevent="handleSkillEnter($event, idx)"
+              rows="2"
+              placeholder="例如：核心领域: 熟练掌握 Vue 3、TypeScript 与工程化架构，具备大型项目重构落地经验..."
+              class="w-full text-xs text-slate-800 placeholder-slate-400 bg-transparent border-none outline-none resize-none leading-relaxed py-0.5 font-sans"
+            />
+          </div>
+
+          <!-- 悬浮微型手柄 (上移、下移、删除) -->
+          <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0 pt-0.5">
             <button
-              class="px-2 py-0.5 bg-white border border-slate-200 rounded hover:border-primary-400 hover:text-primary-700 transition"
-              @click="insertSkillPrefix('numbered')"
+              v-if="idx > 0"
+              class="w-5 h-5 flex items-center justify-center text-[10px] text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition"
+              title="上移"
+              @click="moveSkillItem(idx, -1)"
             >
-              🔢 序号列表 (1. 2.)
+              ↑
             </button>
             <button
-              class="px-2 py-0.5 bg-white border border-slate-200 rounded hover:border-primary-400 hover:text-primary-700 transition"
-              @click="insertSkillPrefix('bullet')"
+              v-if="idx < localResume.skills.length - 1"
+              class="w-5 h-5 flex items-center justify-center text-[10px] text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition"
+              title="下移"
+              @click="moveSkillItem(idx, 1)"
             >
-              • 圆点列表
+              ↓
             </button>
             <button
-              class="px-2 py-0.5 bg-white border border-slate-200 rounded hover:border-primary-400 hover:text-primary-700 transition"
-              @click="insertSkillPrefix('bold')"
+              class="w-5 h-5 flex items-center justify-center text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+              title="删除此项"
+              @click="removeSkillItem(idx)"
             >
-              【加粗前缀】
+              ×
             </button>
-            <button
-              class="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded hover:bg-emerald-100 transition"
-              @click="insertSkillPrefix('demo')"
-            >
+          </div>
+        </div>
+
+        <!-- 空状态引导 -->
+        <div
+          v-if="!localResume.skills?.length"
+          class="py-8 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 text-xs bg-slate-50/50"
+        >
+          <span>⚡ 暂无技能条目</span>
+          <div class="flex items-center gap-2">
+            <button class="btn-primary !text-xs !py-1" @click="addSkillItem">
+              ＋ 添加第一条技能
+            </button>
+            <button class="btn-secondary !text-xs !py-1" @click="loadSampleSkills">
               💡 载入高质范例
             </button>
           </div>
-          <button class="text-slate-400 hover:text-red-500 text-[11px]" @click="insertSkillPrefix('clear')">
-            清空内容
+        </div>
+
+        <!-- 底部添加按钮 -->
+        <div v-if="localResume.skills?.length" class="pt-1">
+          <button
+            class="w-full py-2 border border-dashed border-slate-300 hover:border-primary-400 hover:text-primary-700 hover:bg-primary-50/30 text-slate-500 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition"
+            @click="addSkillItem"
+          >
+            <span>＋</span>
+            <span>添加一项专业技能</span>
+            <span class="text-[10px] text-slate-400 font-normal">（或在上方输入框按回车）</span>
           </button>
-        </div>
-
-        <!-- 文本输入核心区域：每一次打字立刻触发 0ms 实时预览 -->
-        <div class="relative">
-          <textarea
-            :value="skillText"
-            @input="handleSkillTextInput"
-            rows="8"
-            class="input font-mono text-xs leading-relaxed p-3.5 w-full bg-white border border-slate-300 focus:border-primary-500 rounded-xl shadow-inner transition"
-            placeholder="在此输入您的专业技能（支持每行一条，以 1. 2. 3. 开头或【领域】: 冒号前会自动加粗渲染）..."
-          />
-        </div>
-        <p class="text-[11px] text-slate-400">
-          💡 提示：在右侧纸张中，类似 <span class="font-mono text-slate-600 font-bold">1. 核心技术:</span> 的冒号前半句会自动加粗呈现，完美匹配高保真简历排版规范。
-        </p>
-      </div>
-
-      <!-- 模式 2: 分类标签卡片模式 -->
-      <div v-else class="space-y-3">
-        <div class="flex justify-end">
-          <button class="btn-primary !text-xs !py-1" @click="addSkillGroup">＋ 新增分类</button>
-        </div>
-
-        <div
-          v-for="(item, idx) in localResume.skills"
-          :key="idx"
-          class="p-3.5 border border-slate-200 rounded-xl bg-white space-y-2.5 shadow-2xs hover:border-slate-300 transition"
-        >
-          <div class="flex items-center justify-between">
-            <input
-              v-model="item.name"
-              @input="syncSkillTextFromResume(); triggerChange('skills')"
-              class="font-bold text-xs bg-transparent text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-primary-500 focus:outline-none px-1"
-              placeholder="分类名称（如：AI 算法、架构设计）"
-            />
-            <button class="text-xs text-slate-400 hover:text-red-500" @click="removeSkillGroup(idx)">删除分类</button>
-          </div>
-
-          <!-- 标签展示与行内输入框 -->
-          <div class="flex flex-wrap items-center gap-1.5">
-            <span
-              v-for="(kw, ki) in item.keywords"
-              :key="ki"
-              class="px-2.5 py-1 bg-primary-50/60 border border-primary-200/80 rounded-md text-xs text-primary-800 flex items-center gap-1 font-medium"
-            >
-              {{ kw }}
-              <span class="cursor-pointer text-primary-400 hover:text-red-500 text-[10px]" @click="removeKeyword(item, ki)">✕</span>
-            </span>
-            <input
-              v-model="skillInputs[idx]"
-              @keydown.enter.prevent="handleAddKeyword(idx)"
-              @blur="handleAddKeyword(idx)"
-              placeholder="+ 输入技能回车"
-              class="text-xs px-2.5 py-1 bg-slate-50 border border-dashed border-slate-300 rounded-md w-28 focus:bg-white focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition"
-            />
-          </div>
         </div>
       </div>
     </div>
