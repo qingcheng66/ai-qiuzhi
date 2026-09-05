@@ -214,8 +214,8 @@ async function createResumeDraft(mode: 'blank' | 'kb' = 'blank') {
       initialContent = {
         is_blank: true,
         basics: {
-          name: '求职者姓名',
-          label: '意向岗位',
+          name: '',
+          label: '',
           email: '',
           phone: '',
           location: '',
@@ -259,8 +259,8 @@ function resetCurrentToBlank() {
   if (!resume.value) return
   resume.value = {
     basics: {
-      name: '求职者姓名',
-      label: '意向岗位',
+      name: '',
+      label: '',
       email: '',
       phone: '',
       location: '',

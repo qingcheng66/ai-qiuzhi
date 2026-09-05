@@ -34,10 +34,9 @@ SECTION_NAMES = ["basics", "education", "skills", "projects", "experience", "hig
 
 @router.post("/create-draft")
 def create_draft(req: CreateDraftRequest, user_id: int = 1, db: Session = Depends(get_db)):
-    init_content = req.initial_content or {}
-    
-    # 如果没有传入 initial_content，从知识库中获取默认 profile
-    if not init_content:
+    # 仅当没有传入 initial_content (即为 None) 时，才从知识库中获取默认 profile
+    # 若前端显式传入了 initial_content（例如新建空白简历传 {}），则保留空白
+    if req.initial_content is None:
         from app.services import knowledge_service
         prof = knowledge_service.get_profile(db, user_id)
         if prof:
@@ -60,6 +59,10 @@ def create_draft(req: CreateDraftRequest, user_id: int = 1, db: Session = Depend
                 "highlights": [],
                 "custom_sections": [],
             }
+        else:
+            init_content = {}
+    else:
+        init_content = req.initial_content
 
     draft = ResumeData(
         user_id=user_id,

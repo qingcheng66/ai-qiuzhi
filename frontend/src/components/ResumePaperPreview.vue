@@ -572,6 +572,7 @@ defineExpose({
                   <input
                     id="inline-field-name"
                     v-model="editingFieldValue"
+                    placeholder="姓名"
                     class="text-3xl font-extrabold tracking-wider text-slate-950 font-sans border-b-2 border-primary-500 outline-none px-1 bg-primary-50/30 rounded"
                     @keydown.enter="finishEditField('name')"
                     @blur="finishEditField('name')"
@@ -579,21 +580,23 @@ defineExpose({
                 </div>
                 <h1
                   v-else
-                  class="group/name text-3xl font-extrabold tracking-wider text-slate-950 font-sans cursor-pointer hover:text-primary-600 transition flex items-baseline gap-1"
+                  class="group/name text-3xl font-extrabold tracking-wider font-sans cursor-pointer transition flex items-baseline gap-1"
+                  :class="basics.name ? 'text-slate-950 hover:text-primary-600' : 'text-slate-300 hover:text-primary-500 italic font-normal'"
                   title="点击直接修改姓名"
                   @click="startEditField('name')"
                 >
-                  <span>{{ basics.name || '您的姓名' }}</span>
-                  <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition">✎</span>
+                  <span>{{ basics.name || '（点击输入姓名）' }}</span>
+                  <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition not-italic">✎</span>
                 </h1>
 
                 <!-- 求职意向 (头衔徽标) -->
-                <div class="flex items-center gap-1.5">
+                <div v-if="basics.label || basics.title || editable" class="flex items-center gap-1.5">
                   <span class="text-[11px] text-slate-400 font-medium">求职意向:</span>
                   <div v-if="editingField === 'label'" class="inline-block">
                     <input
                       id="inline-field-label"
                       v-model="editingFieldValue"
+                      placeholder="如：全栈开发工程师"
                       class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 bg-primary-50/30 rounded"
                       @keydown.enter="finishEditField('label')"
                       @blur="finishEditField('label')"
@@ -601,12 +604,13 @@ defineExpose({
                   </div>
                   <div
                     v-else
-                    class="group/title text-xs font-bold text-slate-800 cursor-pointer hover:text-primary-600 flex items-center gap-1 transition px-2 py-0.5 rounded bg-slate-100/90 border border-slate-200/90"
+                    class="group/title text-xs cursor-pointer hover:text-primary-600 flex items-center gap-1 transition px-2 py-0.5 rounded border"
+                    :class="basics.label || basics.title ? 'text-slate-800 bg-slate-100/90 border-slate-200/90 font-bold' : 'text-slate-400 bg-slate-50 border-dashed border-slate-200 italic font-normal'"
                     title="点击直接原地修改意向头衔"
                     @click="startEditField('label')"
                   >
-                    <span>{{ basics.label || basics.title || '点击设置求职意向 (如：全栈开发工程师)' }}</span>
-                    <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition">✎</span>
+                    <span>{{ basics.label || basics.title || '+ 点击设置意向岗位' }}</span>
+                    <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition not-italic">✎</span>
                   </div>
                 </div>
               </div>
@@ -663,22 +667,23 @@ defineExpose({
                   </div>
                 </div>
 
-                <!-- 空态吸附提示 (当没有任何标签时) -->
+                <!-- 空态吸附提示 (当没有任何标签时且在编辑态下显示微弱提示) -->
                 <div
-                  v-if="!activeHeaderChips.length"
-                  class="col-span-2 px-3 py-2 rounded-lg border border-dashed border-slate-300 text-slate-400 text-xs flex items-center justify-center gap-2 bg-slate-50/60"
+                  v-if="!activeHeaderChips.length && editable"
+                  class="col-span-2 py-2 px-3 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs flex items-center justify-center gap-1.5 bg-slate-50/40 select-none"
                 >
-                  <span>🏷️</span>
-                  <span>从左侧积木池拖入手机、微信、期望薪资等标签，将在此自动形成严整双列对齐网格</span>
+                  <span class="text-xs opacity-60">🏷️</span>
+                  <span class="text-[11px]">暂无联系方式，可从左侧标签积木池点击或拖入【电话、微信、邮箱】等</span>
                 </div>
               </div>
 
               <!-- 3. 一句话优势 / 自我总结 (通栏对齐) -->
-              <div class="pt-1 border-t border-slate-100">
+              <div v-if="basics.summary || editable" class="pt-1 border-t border-slate-100">
                 <div v-if="editingField === 'summary'">
                   <textarea
                     id="inline-field-summary"
                     v-model="editingFieldValue"
+                    placeholder="输入个人核心技术特长与综合优势总结…"
                     rows="2"
                     class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1.5 outline-none bg-primary-50/20"
                     @keydown.enter.ctrl="finishEditField('summary')"
@@ -687,19 +692,27 @@ defineExpose({
                   <div class="text-[10px] text-slate-400 text-right">按 Ctrl+Enter 或点击空白处完成</div>
                 </div>
                 <p
-                  v-else
+                  v-else-if="basics.summary"
                   class="group/summary text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900 transition flex items-start gap-1"
                   title="点击原地修改个人技术特长与优势总结"
                   @click="startEditField('summary')"
                 >
-                  <span class="flex-1">{{ basics.summary || '点击输入一句话个人核心技术特长与综合优势总结…' }}</span>
+                  <span class="flex-1">{{ basics.summary }}</span>
                   <span class="text-[10px] text-slate-300 group-hover/summary:text-primary-500 opacity-0 group-hover/summary:opacity-100 transition shrink-0">✎</span>
                 </p>
+                <div
+                  v-else-if="editable"
+                  class="text-[11px] text-slate-300 hover:text-primary-600 cursor-pointer py-0.5 flex items-center gap-1 italic transition select-none"
+                  title="点击添加个人核心优势总结"
+                  @click="startEditField('summary')"
+                >
+                  <span>+ 添加一句话优势总结 (可选)</span>
+                </div>
               </div>
             </div>
 
-            <!-- 右侧免冠证件照 -->
-            <div class="shrink-0 flex flex-col items-center justify-start pt-1">
+            <!-- 右侧免冠证件照（仅在有照片或明确开启时显示） -->
+            <div v-if="basics.photo || basics.avatar || basics.show_photo" class="shrink-0 flex flex-col items-center justify-start pt-1">
               <div class="w-[82px] h-[108px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
                 <img
                   v-if="basics.photo || basics.avatar"
