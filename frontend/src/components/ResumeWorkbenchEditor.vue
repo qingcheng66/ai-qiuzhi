@@ -220,17 +220,151 @@ function removeSkillGroup(idx: number) {
 }
 
 // ---------------- 个人信息头像上传 ----------------
+const PRESET_ICONS: Record<string, string> = {
+  phone: '📞',
+  email: '✉️',
+  wechat: '💬',
+  location: '📍',
+  birthDate: '🎂',
+  github: '🐙',
+  blog: '🌐',
+  name: '👤',
+  label: '🎯',
+  photo: '📷',
+  summary: '✨',
+}
+
+const PRESET_LABELS: Record<string, string> = {
+  phone: '联系电话',
+  email: '电子邮箱',
+  wechat: '微信号',
+  location: '所在城市 / 地点',
+  birthDate: '出生年月',
+  github: 'GitHub 主页',
+  blog: '个人博客 / 作品集',
+  name: '姓名',
+  label: '求职意向 / 职位头衔',
+  photo: '免冠证件照',
+  summary: '一句话技术优势 / 自我总结',
+}
+
+// 动态提取画板上已上板的组件列表 (未上板的字段坚决不显示填写框)
+const activeBasicsWidgets = computed(() => {
+  const b = localResume.value?.basics || {}
+  if (Array.isArray(b.grid_widgets_2d)) {
+    return b.grid_widgets_2d
+  }
+
+  // 兜底（如果初始数据尚未生成 grid_widgets_2d，按实际有值项展示）
+  const list: any[] = []
+  if (b.name) list.push({ id: 'core_name', type: 'name', key: 'name', label: '姓名', value: b.name, icon: '👤', w: 6, h: 1 })
+  if (b.label) list.push({ id: 'core_label', type: 'label', key: 'label', label: '求职意向', value: b.label, icon: '🎯', w: 6, h: 1 })
+  if (b.photo || b.avatar) list.push({ id: 'core_photo', type: 'photo', key: 'photo', label: '免冠照', value: b.photo || b.avatar, icon: '📷', w: 3, h: 3 })
+  const stdKeys = ['phone', 'email', 'wechat', 'location', 'birthDate', 'github', 'blog']
+  for (const k of stdKeys) {
+    if (b[k]) list.push({ id: `std_${k}`, type: 'tag', key: k, label: PRESET_LABELS[k] || k, value: b[k], icon: PRESET_ICONS[k] || '🏷️', w: 4, h: 1 })
+  }
+  const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
+  cfs.forEach((cf: any, idx: number) => {
+    list.push({ id: cf.id || `cf_${idx}`, type: 'custom', label: cf.label, value: cf.value, icon: cf.icon || '🏷️', w: 4, h: 1 })
+  })
+  if (b.summary) list.push({ id: 'core_summary', type: 'summary', key: 'summary', label: '一句话核心优势', value: b.summary, icon: '✨', w: 12, h: 2 })
+  return list
+})
+
+function handleWidgetValueChange(widget: any, newVal: string) {
+  widget.value = newVal
+  const b = localResume.value.basics || {}
+
+  // 同步到 grid_widgets_2d 中的对应组件
+  if (Array.isArray(b.grid_widgets_2d)) {
+    const target = b.grid_widgets_2d.find((w: any) => w.id === widget.id)
+    if (target) {
+      target.value = newVal
+    }
+  }
+
+  // 同步到 basics 标准字段供模板与导出使用
+  if (widget.type === 'name' || widget.key === 'name' || widget.id === 'core_name') {
+    b.name = newVal
+  } else if (widget.type === 'label' || widget.key === 'label' || widget.id === 'core_label') {
+    b.label = newVal
+  } else if (widget.type === 'photo' || widget.key === 'photo' || widget.id === 'core_photo') {
+    b.photo = newVal
+  } else if (widget.type === 'summary' || widget.key === 'summary' || widget.id === 'core_summary') {
+    b.summary = newVal
+  } else if (widget.key && ['phone', 'email', 'wechat', 'location', 'birthDate', 'github', 'blog'].includes(widget.key)) {
+    b[widget.key] = newVal
+  } else {
+    if (!Array.isArray(b.custom_fields)) b.custom_fields = []
+    const found = b.custom_fields.find((cf: any) => cf.id === widget.id || cf.label === widget.label)
+    if (found) {
+      found.value = newVal
+    } else {
+      b.custom_fields.push({ id: widget.id, label: widget.label, value: newVal, icon: widget.icon })
+    }
+  }
+
+  triggerChange('basics')
+}
+
+function removeBasicsWidget(widget: any) {
+  const b = localResume.value.basics || {}
+  if (Array.isArray(b.grid_widgets_2d)) {
+    b.grid_widgets_2d = b.grid_widgets_2d.filter((w: any) => w.id !== widget.id)
+  }
+
+  // 清理对应字段值
+  if (widget.type === 'name' || widget.key === 'name' || widget.id === 'core_name') {
+    b.name = ''
+  } else if (widget.type === 'label' || widget.key === 'label' || widget.id === 'core_label') {
+    b.label = ''
+  } else if (widget.type === 'photo' || widget.key === 'photo' || widget.id === 'core_photo') {
+    b.photo = ''
+    delete b.avatar
+  } else if (widget.type === 'summary' || widget.key === 'summary' || widget.id === 'core_summary') {
+    b.summary = ''
+  } else if (widget.key && ['phone', 'email', 'wechat', 'location', 'birthDate', 'github', 'blog'].includes(widget.key)) {
+    b[widget.key] = ''
+  } else if (Array.isArray(b.custom_fields)) {
+    b.custom_fields = b.custom_fields.filter((cf: any) => cf.id !== widget.id && cf.label !== widget.label)
+  }
+
+  triggerChange('basics')
+}
+
 function handlePhotoUpload(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   const reader = new FileReader()
   reader.onload = (event) => {
     if (event.target?.result) {
-      localResume.value.basics.photo = event.target.result as string
+      const url = event.target.result as string
+      const b = localResume.value.basics || {}
+      b.photo = url
+      if (Array.isArray(b.grid_widgets_2d)) {
+        const photoWidget = b.grid_widgets_2d.find((w: any) => w.type === 'photo' || w.key === 'photo' || w.id === 'core_photo')
+        if (photoWidget) {
+          photoWidget.value = url
+        }
+      }
       triggerChange('basics')
     }
   }
   reader.readAsDataURL(file)
+}
+
+function clearPhoto() {
+  const b = localResume.value.basics || {}
+  b.photo = ''
+  delete b.avatar
+  if (Array.isArray(b.grid_widgets_2d)) {
+    const photoWidget = b.grid_widgets_2d.find((w: any) => w.type === 'photo' || w.key === 'photo' || w.id === 'core_photo')
+    if (photoWidget) {
+      photoWidget.value = ''
+    }
+  }
+  triggerChange('basics')
 }
 
 // ---------------- 个人信息自定义字段 ----------------
@@ -241,13 +375,36 @@ const showAddField = ref(false)
 function addCustomField(label?: string) {
   const name = label || newFieldLabel.value.trim()
   if (!name) return
-  if (!localResume.value.basics.custom_fields) {
-    localResume.value.basics.custom_fields = []
+  if (!localResume.value.basics) localResume.value.basics = {}
+  const b = localResume.value.basics
+
+  const newId = `cf_${Date.now()}`
+  if (!Array.isArray(b.custom_fields)) {
+    b.custom_fields = []
   }
-  localResume.value.basics.custom_fields.push({
+  b.custom_fields.push({
+    id: newId,
     label: name,
     value: newFieldValue.value.trim(),
   })
+
+  // 同时也添加到 2D 画板
+  if (!Array.isArray(b.grid_widgets_2d)) {
+    b.grid_widgets_2d = []
+  }
+  b.grid_widgets_2d.push({
+    id: newId,
+    type: 'custom',
+    label: name,
+    value: newFieldValue.value.trim(),
+    icon: '🏷️',
+    col: 1,
+    row: Math.max(1, b.grid_widgets_2d.length + 1),
+    w: 4,
+    h: 1,
+    isCustom: true,
+  })
+
   newFieldLabel.value = ''
   newFieldValue.value = ''
   showAddField.value = false
@@ -329,14 +486,14 @@ function addCustomSectionItem(sec: CustomSection) {
 <template>
   <div class="space-y-4">
 
-    <!-- ===================== 1. 基本信息 ===================== -->
+    <!-- ===================== 1. 基本信息 (与已上板 2D 组件 100% 动态严格对齐) ===================== -->
     <div v-if="activeSection === 'basics'" class="space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
           <h4 class="font-bold text-base text-slate-800 flex items-center gap-2">
             <span>👤</span> 基本资料
           </h4>
-          <p class="text-xs text-slate-400 mt-0.5">联系方式、求职意向与个人形象展示</p>
+          <p class="text-xs text-slate-400 mt-0.5">联系方式、求职意向与形象展示（已上板组件专属填写框）</p>
         </div>
         <button
           class="btn-secondary !text-xs !py-1.5 flex items-center gap-1.5 text-primary-600 bg-primary-50/50 hover:bg-primary-100/60 border-primary-200"
@@ -347,109 +504,150 @@ function addCustomSectionItem(sec: CustomSection) {
         </button>
       </div>
 
-      <!-- 拖拽积木提示条 -->
+      <!-- 动态表单联动提示条 -->
       <div class="p-2.5 bg-primary-50/60 border border-primary-200 rounded-xl flex items-center justify-between text-xs text-primary-800">
         <div class="flex items-center gap-2">
           <span class="text-base">🏷️</span>
-          <span><strong>全新的标签积木化体验已就绪：</strong>您可以在左侧【标签积木池】直接按住任意标签拖入右侧 A4 纸张，或直接在纸上点击改字！</span>
+          <span><strong>动态填写表单已联动：</strong>此处仅展示已上板组件的输入框。在左侧【标签积木池】上板或下板，对应填写框会实时联动增减。</span>
         </div>
       </div>
 
-      <!-- 头像照片快捷上传与 URL -->
-      <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-4">
-        <div class="w-16 h-20 bg-white border border-slate-300 rounded overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
-          <img
-            v-if="localResume.basics?.photo"
-            :src="localResume.basics.photo"
-            alt="头像"
-            class="w-full h-full object-cover"
-          />
-          <span v-else class="text-2xl text-slate-300">👤</span>
+      <!-- 空态：若尚未上板任何组件 -->
+      <div
+        v-if="!activeBasicsWidgets.length"
+        class="py-12 px-6 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400 text-center flex flex-col items-center justify-center gap-3 bg-slate-50/60"
+      >
+        <div class="text-3xl">🧱</div>
+        <div class="font-bold text-slate-700 text-sm">暂无已上板的基本资料组件</div>
+        <div class="text-xs text-slate-500 max-w-sm leading-relaxed">
+          请在左侧<strong>【标签积木池】</strong>点击或拖入需要的信息组件（如：姓名、求职意向、联系电话、免冠照等）。上板后，此处将自动呈现对应的专属填写框。
         </div>
-        <div class="flex-1 space-y-1.5">
-          <div class="flex items-center gap-2">
-            <label class="btn-secondary !text-xs !py-1 cursor-pointer">
-              📷 本地上传免冠照
-              <input type="file" accept="image/*" class="hidden" @change="handlePhotoUpload" />
+      </div>
+
+      <!-- 已上板组件专属填写框列表 (按组件类型精准呈现) -->
+      <div v-else class="space-y-3.5">
+        <!-- 1. 免冠照组件 (如果已上板) -->
+        <div
+          v-for="photoWidget in activeBasicsWidgets.filter((w: any) => w.type === 'photo' || w.key === 'photo' || w.id === 'core_photo')"
+          :key="photoWidget.id"
+          class="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center gap-4 relative group/photo"
+        >
+          <div class="w-16 h-20 bg-white border border-slate-300 rounded overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
+            <img
+              v-if="photoWidget.value || localResume.basics?.photo"
+              :src="photoWidget.value || localResume.basics.photo"
+              alt="头像"
+              class="w-full h-full object-cover"
+            />
+            <span v-else class="text-2xl text-slate-300">👤</span>
+          </div>
+          <div class="flex-1 space-y-1.5 min-w-0">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <label class="btn-secondary !text-xs !py-1 cursor-pointer">
+                  📷 本地上传免冠照
+                  <input type="file" accept="image/*" class="hidden" @change="handlePhotoUpload" />
+                </label>
+                <button
+                  v-if="photoWidget.value || localResume.basics?.photo"
+                  class="text-xs text-slate-400 hover:text-red-500"
+                  @click="clearPhoto"
+                >
+                  清除照片
+                </button>
+              </div>
+              <button
+                class="text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 px-1.5 py-0.5 rounded transition"
+                title="下板此组件"
+                @click="removeBasicsWidget(photoWidget)"
+              >
+                ✕ 下板
+              </button>
+            </div>
+            <input
+              :value="photoWidget.value || localResume.basics?.photo || ''"
+              @input="handleWidgetValueChange(photoWidget, ($event.target as HTMLInputElement).value)"
+              class="input !text-xs"
+              placeholder="或粘贴网络图片 URL / Base64 地址"
+            />
+          </div>
+        </div>
+
+        <!-- 2. 常规文本 / 联系方式 / 自定义字段网格 (双列整齐排布) -->
+        <div class="grid grid-cols-2 gap-3">
+          <div
+            v-for="widget in activeBasicsWidgets.filter((w: any) => !['photo', 'summary'].includes(w.type) && w.key !== 'photo' && w.key !== 'summary' && w.id !== 'core_photo' && w.id !== 'core_summary')"
+            :key="widget.id"
+            class="group/field relative p-2.5 rounded-xl border border-slate-200 bg-white hover:border-primary-300 transition-all shadow-2xs"
+            :class="widget.type === 'name' || widget.w >= 8 ? 'col-span-2' : ''"
+          >
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <span>{{ widget.icon || '🏷️' }}</span>
+                <span>{{ widget.label }}</span>
+                <span v-if="widget.type === 'name'" class="text-red-500">*</span>
+              </label>
+              <button
+                class="text-slate-400 hover:text-red-500 text-xs px-1 hover:bg-red-50 rounded transition"
+                title="下板移出此项"
+                @click="removeBasicsWidget(widget)"
+              >
+                ✕ 下板
+              </button>
+            </div>
+            <input
+              :value="widget.value"
+              @input="handleWidgetValueChange(widget, ($event.target as HTMLInputElement).value)"
+              class="input !text-sm font-medium w-full"
+              :placeholder="`输入${widget.label}…`"
+            />
+          </div>
+        </div>
+
+        <!-- 3. 一句话优势总结 (通栏文本框) -->
+        <div
+          v-for="sumWidget in activeBasicsWidgets.filter((w: any) => w.type === 'summary' || w.key === 'summary' || w.id === 'core_summary')"
+          :key="sumWidget.id"
+          class="p-3 bg-white border border-slate-200 rounded-xl space-y-1.5 shadow-2xs group/sum"
+        >
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+              <span>{{ sumWidget.icon || '✨' }}</span>
+              <span>{{ sumWidget.label || '一句话技术优势 / 自我总结' }}</span>
             </label>
             <button
-              v-if="localResume.basics?.photo"
-              class="text-xs text-slate-400 hover:text-red-500"
-              @click="localResume.basics.photo = ''; triggerChange('basics')"
+              class="text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 px-1.5 py-0.5 rounded transition"
+              title="下板此组件"
+              @click="removeBasicsWidget(sumWidget)"
             >
-              清除照片
+              ✕ 下板
             </button>
           </div>
-          <input
-            v-model="localResume.basics.photo"
-            @input="triggerChange('basics')"
-            class="input !text-xs"
-            placeholder="或粘贴网络图片 URL / Base64 地址"
-          />
-        </div>
-      </div>
-
-      <!-- 核心常规字段 -->
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="label !text-xs font-semibold text-slate-700">姓名 <span class="text-red-500">*</span></label>
-          <input v-model="localResume.basics.name" @input="triggerChange('basics')" class="input !text-sm font-medium" placeholder="如：刘先生" />
-        </div>
-        <div>
-          <label class="label !text-xs font-semibold text-slate-700">求职意向 / 职位头衔</label>
-          <input v-model="localResume.basics.label" @input="triggerChange('basics')" class="input !text-sm font-medium" placeholder="如：AI 算法工程师 / 全栈架构师" />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">电子邮箱</label>
-          <input v-model="localResume.basics.email" @input="triggerChange('basics')" class="input !text-sm font-mono" placeholder="user@example.com" />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">联系电话</label>
-          <input v-model="localResume.basics.phone" @input="triggerChange('basics')" class="input !text-sm font-mono" placeholder="如：13800000000" />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">出生年月</label>
-          <input v-model="localResume.basics.birthDate" @input="triggerChange('basics')" class="input !text-sm font-mono" placeholder="如：2001/05" />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">所在城市 / 地点</label>
-          <input v-model="localResume.basics.location" @input="triggerChange('basics')" class="input !text-sm" placeholder="如：北京 / 上海 / 深圳" />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">GitHub 主页</label>
-          <input v-model="localResume.basics.github" @input="triggerChange('basics')" class="input !text-sm font-mono" placeholder="https://github.com/..." />
-        </div>
-        <div>
-          <label class="label !text-xs text-slate-600">个人博客 / 作品集</label>
-          <input v-model="localResume.basics.blog" @input="triggerChange('basics')" class="input !text-sm font-mono" placeholder="https://blog.example.com" />
-        </div>
-        <div class="col-span-2">
-          <label class="label !text-xs text-slate-600">一句话技术优势 / 自我总结</label>
           <textarea
-            v-model="localResume.basics.summary"
-            @input="triggerChange('basics')"
-            rows="2"
-            class="input !text-xs leading-relaxed"
-            placeholder="总结您的核心技术特长与个人综合优势，将直接呈现于简历抬头…"
+            :value="sumWidget.value"
+            @input="handleWidgetValueChange(sumWidget, ($event.target as HTMLTextAreaElement).value)"
+            rows="3"
+            class="input !text-xs leading-relaxed w-full font-sans"
+            placeholder="总结您的核心技术特长与个人综合优势，将直接呈现在简历抬头…"
           />
         </div>
       </div>
 
-      <!-- 自定义扩展字段 -->
+      <!-- 底部快捷新建自定义字段（新建后即自动上板） -->
       <div class="pt-3 border-t border-slate-100 space-y-2">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold text-slate-700">自定义信息项</span>
-            <span class="text-[11px] text-slate-400">(快捷添加：微信、期望薪资、政治面貌等)</span>
+            <span class="text-[11px] text-slate-400">(快捷添加：微信、期望薪资、政治面貌等，添加后立即上板)</span>
           </div>
           <button v-if="!showAddField" class="text-xs text-primary-600 hover:underline font-medium" @click="showAddField = true">
-            ＋ 新增字段
+            ＋ 新增自定义项
           </button>
         </div>
 
-        <!-- 常用快捷预设 -->
+        <!-- 常用快捷建议 -->
         <div class="flex items-center gap-1.5 flex-wrap">
-          <span class="text-[11px] text-slate-400">快捷建议:</span>
+          <span class="text-[11px] text-slate-400">快捷预设:</span>
           <button
             v-for="kw in ['微信号', '期望薪资', '期望城市', '政治面貌', '工作经验年限']"
             :key="kw"
@@ -460,28 +658,11 @@ function addCustomSectionItem(sec: CustomSection) {
           </button>
         </div>
 
-        <div v-if="localResume.basics.custom_fields?.length" class="grid grid-cols-2 gap-2 mt-2">
-          <div
-            v-for="(cf, cfi) in localResume.basics.custom_fields"
-            :key="cfi"
-            class="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-          >
-            <span class="font-medium text-slate-600 shrink-0">{{ cf.label }}:</span>
-            <input
-              v-model="cf.value"
-              @input="triggerChange('basics')"
-              class="flex-1 bg-transparent border-b border-transparent focus:border-primary-500 focus:outline-none text-slate-800"
-              placeholder="填入内容"
-            />
-            <button class="text-slate-400 hover:text-red-500 px-1" @click="removeCustomField(cfi)">✕</button>
-          </div>
-        </div>
-
         <!-- 手动增加字段表单 -->
         <div v-if="showAddField" class="p-3 bg-primary-50/40 border border-primary-200 rounded-lg flex items-center gap-2 text-xs">
-          <input v-model="newFieldLabel" placeholder="字段名(如: 微信)" class="input !text-xs !w-36" />
+          <input v-model="newFieldLabel" placeholder="字段名(如: 期望薪资)" class="input !text-xs !w-36" />
           <input v-model="newFieldValue" placeholder="字段内容" class="input !text-xs flex-1" @keydown.enter="addCustomField()" />
-          <button class="btn-primary !text-xs !py-1.5" @click="addCustomField()">确定</button>
+          <button class="btn-primary !text-xs !py-1.5" @click="addCustomField()">确定上板</button>
           <button class="btn-secondary !text-xs !py-1.5" @click="showAddField = false">取消</button>
         </div>
       </div>
