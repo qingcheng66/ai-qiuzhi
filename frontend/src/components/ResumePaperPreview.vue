@@ -1,11 +1,50 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 
 export interface SkillItem {
   type: 'text' | 'group'
   text?: string
   name?: string
   keywords?: string[]
+}
+
+export interface HeaderGridWidget {
+  id: string
+  type: 'name' | 'label' | 'photo' | 'summary' | 'tag' | 'custom'
+  key?: string
+  label: string
+  value: string
+  icon: string
+  cols: number // 2, 3, 4, 6, 12 (out of 12)
+  isCustom?: boolean
+}
+
+const PRESET_ICONS: Record<string, string> = {
+  phone: '📞',
+  email: '✉️',
+  wechat: '💬',
+  location: '📍',
+  birthDate: '🎂',
+  github: '🐙',
+  blog: '🌐',
+  name: '👤',
+  label: '🎯',
+  photo: '📷',
+  summary: '✨',
+}
+
+const PRESET_LABELS: Record<string, string> = {
+  phone: '电话',
+  email: '邮箱',
+  wechat: '微信',
+  location: '城市',
+  birthDate: '生日',
+  github: 'GitHub',
+  blog: '博客',
+  name: '姓名',
+  label: '求职意向',
+  photo: '证件照',
+  summary: '核心优势',
 }
 
 const props = withDefaults(
@@ -29,6 +68,35 @@ const emit = defineEmits<{
   (e: 'select-section', sectionKey: string): void
   (e: 'regenerate-section', sectionKey: string): void
 }>()
+
+// 全局拖拽状态侦听（只有在鼠标拖拽组件时，才向用户点亮 12 栅格辅助对齐导轨）
+const isDraggingActive = ref(false)
+const dragOverWidgetId = ref<string | null>(null)
+const draggingWidgetId = ref<string | null>(null)
+const isHeaderDraggingOver = ref(false)
+
+function onGlobalDragStart() {
+  isDraggingActive.value = true
+}
+
+function onGlobalDragEnd() {
+  isDraggingActive.value = false
+  dragOverWidgetId.value = null
+  draggingWidgetId.value = null
+  isHeaderDraggingOver.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('dragstart', onGlobalDragStart)
+  window.addEventListener('dragend', onGlobalDragEnd)
+  window.addEventListener('drop', onGlobalDragEnd)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('dragstart', onGlobalDragStart)
+  window.removeEventListener('dragend', onGlobalDragEnd)
+  window.removeEventListener('drop', onGlobalDragEnd)
+})
 
 // 主题色彩方案
 const themeStyles = computed(() => {
@@ -83,68 +151,92 @@ function isSectionVisible(secKey: string): boolean {
 
 const basics = computed(() => props.resumeData?.basics || {})
 
-// 基础信息已上板的所有标签（包括电话、邮箱、地点等常规字段与自定义字段）
-interface ActiveTagChip {
-  id: string
-  kind: 'standard' | 'custom'
-  key: string
-  label: string
-  value: string
-  icon: string
-}
-
-const activeHeaderChips = computed<ActiveTagChip[]>(() => {
+// 计算当前画板上的 12 栅格组件列表（支持持久化或从 basics 自动推导）
+const activeGridWidgets = computed<HeaderGridWidget[]>(() => {
   const b = basics.value
-  const list: ActiveTagChip[] = []
-
-  // 1. 常规预置字段（只要有值就作为药丸展示并可交互）
-  if (b.phone) {
-    list.push({ id: 'std_phone', kind: 'standard', key: 'phone', label: '电话', value: b.phone, icon: '📞' })
-  }
-  if (b.email) {
-    list.push({ id: 'std_email', kind: 'standard', key: 'email', label: '邮箱', value: b.email, icon: '✉️' })
-  }
-  if (b.wechat) {
-    list.push({ id: 'std_wechat', kind: 'standard', key: 'wechat', label: '微信', value: b.wechat, icon: '💬' })
-  }
-  if (b.birthDate || b.birth) {
-    list.push({ id: 'std_birthDate', kind: 'standard', key: 'birthDate', label: '生日', value: b.birthDate || b.birth, icon: '🎂' })
-  }
-  if (b.location) {
-    list.push({ id: 'std_location', kind: 'standard', key: 'location', label: '城市', value: b.location, icon: '📍' })
-  }
-  if (b.github) {
-    list.push({ id: 'std_github', kind: 'standard', key: 'github', label: 'GitHub', value: b.github, icon: '🐙' })
-  }
-  if (b.blog) {
-    list.push({ id: 'std_blog', kind: 'standard', key: 'blog', label: '博客', value: b.blog, icon: '🌐' })
+  if (Array.isArray(b.grid_widgets) && b.grid_widgets.length > 0) {
+    return b.grid_widgets
   }
 
-  // 2. 自定义扩展字段
+  // 自动从当前已有 basics 数据推导初态
+  const list: HeaderGridWidget[] = []
+
+  if (b.name) {
+    list.push({
+      id: 'core_name',
+      type: 'name',
+      key: 'name',
+      label: '姓名',
+      value: b.name,
+      icon: '👤',
+      cols: b.label ? 6 : 12,
+    })
+  }
+
+  if (b.label || b.title) {
+    list.push({
+      id: 'core_label',
+      type: 'label',
+      key: 'label',
+      label: '求职意向',
+      value: b.label || b.title,
+      icon: '🎯',
+      cols: 6,
+    })
+  }
+
+  if (b.photo || b.avatar) {
+    list.push({
+      id: 'core_photo',
+      type: 'photo',
+      key: 'photo',
+      label: '免冠照',
+      value: b.photo || b.avatar,
+      icon: '📷',
+      cols: 3,
+    })
+  }
+
+  const stdKeys = ['phone', 'email', 'wechat', 'location', 'birthDate', 'github', 'blog']
+  for (const k of stdKeys) {
+    if (b[k]) {
+      const isLong = ['github', 'blog'].includes(k) || (b[k] && b[k].length > 25)
+      list.push({
+        id: `std_${k}`,
+        type: 'tag',
+        key: k,
+        label: PRESET_LABELS[k] || k,
+        value: b[k],
+        icon: PRESET_ICONS[k] || '🏷️',
+        cols: isLong ? 6 : 4,
+      })
+    }
+  }
+
   const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
   cfs.forEach((cf: any, idx: number) => {
     if (cf && (cf.label || cf.value)) {
       list.push({
         id: cf.id || `cf_${idx}`,
-        kind: 'custom',
-        key: `custom_${idx}`,
+        type: 'custom',
         label: cf.label || '自定义项',
         value: cf.value || '',
         icon: cf.icon || '🏷️',
+        cols: cf.cols || 4,
+        isCustom: true,
       })
     }
   })
 
-  // 如果有 tag_order，按自定义顺序排序
-  const order: string[] = Array.isArray(b.tag_order) ? b.tag_order : []
-  if (order.length > 0) {
-    list.sort((a, b) => {
-      const idxA = order.indexOf(a.id)
-      const idxB = order.indexOf(b.id)
-      if (idxA === -1 && idxB === -1) return 0
-      if (idxA === -1) return 1
-      if (idxB === -1) return -1
-      return idxA - idxB
+  if (b.summary) {
+    list.push({
+      id: 'core_summary',
+      type: 'summary',
+      key: 'summary',
+      label: '一句话核心优势',
+      value: b.summary,
+      icon: '✨',
+      cols: 12,
     })
   }
 
@@ -267,11 +359,236 @@ const currentScale = computed(() => {
   return (props.scale ?? 1) * internalZoom.value
 })
 
-// =================== 拖放交互状态 ===================
-const isHeaderDraggingOver = ref(false)
-const draggingTagLabel = ref('')
+// =================== 12 栅格个人信息组件管理与拖拽交互 ===================
 
-// 1. Header 接收标签拖入
+// 更新并同步网格数据回 basics，保证导出与后端无缝兼容
+function updateGridWidgets(newWidgets: HeaderGridWidget[]) {
+  if (!props.resumeData) return
+  const rd = { ...props.resumeData }
+  if (!rd.basics) rd.basics = {}
+  rd.basics.grid_widgets = newWidgets
+
+  // 严格同步基本数据字段
+  const nameWidget = newWidgets.find((w) => w.type === 'name' || w.id === 'core_name')
+  rd.basics.name = nameWidget ? nameWidget.value : ''
+
+  const labelWidget = newWidgets.find((w) => w.type === 'label' || w.id === 'core_label')
+  rd.basics.label = labelWidget ? labelWidget.value : ''
+
+  const photoWidget = newWidgets.find((w) => w.type === 'photo' || w.id === 'core_photo')
+  rd.basics.photo = photoWidget ? photoWidget.value : ''
+
+  const summaryWidget = newWidgets.find((w) => w.type === 'summary' || w.id === 'core_summary')
+  rd.basics.summary = summaryWidget ? summaryWidget.value : ''
+
+  const stdKeys = ['phone', 'email', 'wechat', 'location', 'birthDate', 'github', 'blog']
+  for (const k of stdKeys) {
+    const found = newWidgets.find((w) => w.key === k)
+    rd.basics[k] = found ? found.value : ''
+  }
+
+  const customWidgets = newWidgets.filter(
+    (w) => w.type === 'custom' || (!w.key && !['name', 'label', 'photo', 'summary'].includes(w.type))
+  )
+  rd.basics.custom_fields = customWidgets.map((w) => ({
+    id: w.id,
+    label: w.label,
+    value: w.value,
+    icon: w.icon,
+    cols: w.cols,
+  }))
+
+  emit('update:resume-data', rd)
+  emit('change', 'basics')
+}
+
+// 自由调整某个组件在 12 栅格中的列跨度 (cols)
+function setWidgetCols(widget: HeaderGridWidget, newCols: number) {
+  if (!props.editable) return
+  const current = [...activeGridWidgets.value]
+  const idx = current.findIndex((w) => w.id === widget.id)
+  if (idx !== -1) {
+    current[idx] = {
+      ...current[idx],
+      cols: newCols,
+    }
+    updateGridWidgets(current)
+  }
+}
+
+// 从画板上移除组件（下板）
+function removeWidget(widget: HeaderGridWidget) {
+  if (!props.editable) return
+  const current = activeGridWidgets.value.filter((w) => w.id !== widget.id)
+  updateGridWidgets(current)
+}
+
+// 原地编辑组件内容
+const editingWidgetId = ref<string | null>(null)
+const editingWidgetValue = ref('')
+
+function startEditWidget(widget: HeaderGridWidget) {
+  if (!props.editable) return
+  editingWidgetId.value = widget.id
+  editingWidgetValue.value = widget.value
+  nextTick(() => {
+    const el = document.getElementById(`inline-input-${widget.id}`)
+    el?.focus()
+  })
+}
+
+function finishEditWidget(widget: HeaderGridWidget) {
+  if (!editingWidgetId.value) return
+  const val = editingWidgetValue.value.trim()
+  editingWidgetId.value = null
+
+  const current = [...activeGridWidgets.value]
+  const idx = current.findIndex((w) => w.id === widget.id)
+  if (idx !== -1) {
+    current[idx] = {
+      ...current[idx],
+      value: val,
+    }
+    updateGridWidgets(current)
+  }
+}
+
+// 照片快捷设置 / 提示修改 URL
+function promptEditPhoto(widget: HeaderGridWidget) {
+  if (!props.editable) return
+  const current = widget.value || ''
+  const newUrl = window.prompt('请输入免冠证件照图片链接 (URL) 或清空：', current)
+  if (newUrl !== null) {
+    const list = [...activeGridWidgets.value]
+    const idx = list.findIndex((w) => w.id === widget.id)
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], value: newUrl.trim() }
+      updateGridWidgets(list)
+    }
+  }
+}
+
+// 网格内部拖拽排序与从素材池拖入
+function onWidgetDragStart(e: DragEvent, widget: HeaderGridWidget) {
+  if (!props.editable) return
+  draggingWidgetId.value = widget.id
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: 'grid-widget-move',
+      id: widget.id,
+    }))
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+
+function onWidgetDragOver(e: DragEvent, targetWidget: HeaderGridWidget) {
+  if (!props.editable) return
+  e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move'
+  }
+  dragOverWidgetId.value = targetWidget.id
+}
+
+function onWidgetDrop(e: DragEvent, targetWidget: HeaderGridWidget) {
+  if (!props.editable) return
+  e.preventDefault()
+  dragOverWidgetId.value = null
+  const raw = e.dataTransfer?.getData('application/json')
+  if (!raw) return
+
+  try {
+    const payload = JSON.parse(raw)
+    // 1. 内部拖拽互换顺序
+    if (payload.type === 'grid-widget-move' && payload.id) {
+      if (payload.id === targetWidget.id) return
+      const current = [...activeGridWidgets.value]
+      const srcIdx = current.findIndex((w) => w.id === payload.id)
+      const targetIdx = current.findIndex((w) => w.id === targetWidget.id)
+      if (srcIdx !== -1 && targetIdx !== -1) {
+        const [moved] = current.splice(srcIdx, 1)
+        current.splice(targetIdx, 0, moved)
+        updateGridWidgets(current)
+      }
+      return
+    }
+
+    // 2. 从左侧素材池拖入插在 targetWidget 之前
+    if (payload.type === 'grid-widget' && payload.data) {
+      insertWidgetAt(payload.data, targetWidget.id)
+    }
+  } catch (err) {
+    console.error('Widget drop error:', err)
+  }
+}
+
+function insertWidgetAt(data: any, targetId: string) {
+  const current = [...activeGridWidgets.value]
+  const existingIdx = current.findIndex(
+    (w) => w.id === data.id || (data.key && w.key === data.key && data.key !== 'custom')
+  )
+  if (existingIdx !== -1) {
+    // 已在板上，调整位置
+    const [moved] = current.splice(existingIdx, 1)
+    const targetIdx = current.findIndex((w) => w.id === targetId)
+    if (targetIdx !== -1) {
+      current.splice(targetIdx, 0, moved)
+    } else {
+      current.push(moved)
+    }
+    updateGridWidgets(current)
+    return
+  }
+
+  const widgetType = data.widgetType || data.type || (data.category === 'core' ? data.key : 'tag')
+  const newWidget: HeaderGridWidget = {
+    id: data.id || `widget_${Date.now()}`,
+    type: widgetType,
+    key: data.key,
+    label: data.label || '组件',
+    value: data.value || '',
+    icon: data.icon || '🏷️',
+    cols: data.cols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4),
+    isCustom: data.category === 'custom' || data.isCustom,
+  }
+
+  const targetIdx = current.findIndex((w) => w.id === targetId)
+  if (targetIdx !== -1) {
+    current.splice(targetIdx, 0, newWidget)
+  } else {
+    current.push(newWidget)
+  }
+  updateGridWidgets(current)
+}
+
+function appendWidget(data: any) {
+  const current = [...activeGridWidgets.value]
+  const existingIdx = current.findIndex(
+    (w) => w.id === data.id || (data.key && w.key === data.key && data.key !== 'custom')
+  )
+  if (existingIdx !== -1) {
+    if (data.value) current[existingIdx].value = data.value
+    updateGridWidgets(current)
+    return
+  }
+
+  const widgetType = data.widgetType || data.type || (data.category === 'core' ? data.key : 'tag')
+  const newWidget: HeaderGridWidget = {
+    id: data.id || `widget_${Date.now()}`,
+    type: widgetType,
+    key: data.key,
+    label: data.label || '组件',
+    value: data.value || '',
+    icon: data.icon || '🏷️',
+    cols: data.cols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4),
+    isCustom: data.category === 'custom' || data.isCustom,
+  }
+
+  current.push(newWidget)
+  updateGridWidgets(current)
+}
+
+// 头部区域拖拽事件
 function handleHeaderDragOver(e: DragEvent) {
   if (!props.editable) return
   e.preventDefault()
@@ -292,196 +609,34 @@ function handleHeaderDrop(e: DragEvent) {
   if (!props.editable) return
   e.preventDefault()
   isHeaderDraggingOver.value = false
-
   const raw = e.dataTransfer?.getData('application/json')
   if (!raw) return
 
   try {
     const payload = JSON.parse(raw)
-    if (payload.type === 'tag') {
-      applyTagToBasics(payload.data)
+    if (payload.type === 'grid-widget' && payload.data) {
+      appendWidget(payload.data)
+    } else if (payload.type === 'tag' && payload.data) {
+      appendWidget(payload.data)
     }
   } catch (err) {
-    console.error('Failed to parse dropped tag data:', err)
+    console.error('Header drop error:', err)
   }
 }
 
-// 将拖入或点击的标签应用至 basics
+// 供父组件直接调用
 function applyTagToBasics(tag: any) {
-  if (!props.resumeData) return
-  const rd = { ...props.resumeData }
-  if (!rd.basics) rd.basics = {}
-
-  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
-  if (tag.key && standardKeys.includes(tag.key)) {
-    // 写入常规标准字段
-    rd.basics[tag.key] = tag.value || rd.basics[tag.key] || `${tag.label}内容`
-  } else {
-    // 写入自定义扩展字段
-    if (!Array.isArray(rd.basics.custom_fields)) {
-      rd.basics.custom_fields = []
-    }
-    // 检查是否已有同名标签
-    const existing = rd.basics.custom_fields.find((cf: any) => cf.label === tag.label)
-    if (existing) {
-      existing.value = tag.value || existing.value
-    } else {
-      rd.basics.custom_fields.push({
-        id: tag.id || `cf_${Date.now()}`,
-        label: tag.label,
-        value: tag.value || '点击编辑内容',
-        icon: tag.icon || '🏷️',
-      })
-    }
-  }
-
-  emit('update:resume-data', rd)
-  emit('change', 'basics')
-}
-
-// 从画板上移除标签
-function removeTagFromHeader(chip: ActiveTagChip, e?: MouseEvent) {
-  if (e) e.stopPropagation()
-  if (!props.resumeData) return
-  const rd = { ...props.resumeData }
-  if (!rd.basics) return
-
-  if (chip.kind === 'standard') {
-    rd.basics[chip.key] = ''
-  } else {
-    const cfs = Array.isArray(rd.basics.custom_fields) ? rd.basics.custom_fields : []
-    const idx = parseInt(chip.id.replace('cf_', ''), 10)
-    if (!isNaN(idx) && idx >= 0 && idx < cfs.length) {
-      cfs.splice(idx, 1)
-      rd.basics.custom_fields = [...cfs]
-    } else {
-      rd.basics.custom_fields = cfs.filter((cf: any) => cf.label !== chip.label)
-    }
-  }
-
-  emit('update:resume-data', rd)
-  emit('change', 'basics')
-}
-
-// 标签原地编辑 (Inline Click-to-Edit)
-const editingChipId = ref<string | null>(null)
-const editingChipValue = ref('')
-
-function startEditChip(chip: ActiveTagChip) {
-  if (!props.editable) return
-  editingChipId.value = chip.id
-  editingChipValue.value = chip.value
-  nextTick(() => {
-    const input = document.getElementById(`inline-chip-input-${chip.id}`)
-    input?.focus()
+  appendWidget({
+    id: tag.id,
+    widgetType: tag.type || (tag.category === 'core' ? tag.key : 'tag'),
+    key: tag.key || 'custom',
+    label: tag.label,
+    value: tag.value,
+    icon: tag.icon,
+    cols: tag.defaultCols || 4,
+    category: tag.category,
+    isCustom: tag.isCustom,
   })
-}
-
-function finishEditChip(chip: ActiveTagChip) {
-  if (!editingChipId.value) return
-  const val = editingChipValue.value.trim()
-  editingChipId.value = null
-
-  if (!props.resumeData) return
-  const rd = { ...props.resumeData }
-  if (!rd.basics) rd.basics = {}
-
-  if (chip.kind === 'standard') {
-    rd.basics[chip.key] = val
-  } else {
-    const cfs = Array.isArray(rd.basics.custom_fields) ? rd.basics.custom_fields : []
-    const idx = parseInt(chip.id.replace('cf_', ''), 10)
-    if (!isNaN(idx) && cfs[idx]) {
-      cfs[idx].value = val
-      rd.basics.custom_fields = [...cfs]
-    }
-  }
-
-  emit('update:resume-data', rd)
-  emit('change', 'basics')
-}
-
-// 姓名/求职头衔/总结 原地点击编辑
-const editingField = ref<string | null>(null)
-const editingFieldValue = ref('')
-
-function startEditField(fieldName: 'name' | 'label' | 'summary') {
-  if (!props.editable) return
-  editingField.value = fieldName
-  editingFieldValue.value = basics.value[fieldName] || ''
-  nextTick(() => {
-    const el = document.getElementById(`inline-field-${fieldName}`)
-    el?.focus()
-  })
-}
-
-function finishEditField(fieldName: 'name' | 'label' | 'summary') {
-  if (!editingField.value) return
-  const val = editingFieldValue.value.trim()
-  editingField.value = null
-
-  if (!props.resumeData) return
-  const rd = { ...props.resumeData }
-  if (!rd.basics) rd.basics = {}
-  rd.basics[fieldName] = val
-
-  emit('update:resume-data', rd)
-  emit('change', 'basics')
-}
-
-function isLongChip(chip: ActiveTagChip): boolean {
-  if (['github', 'blog'].includes(chip.key)) return true
-  if (chip.value && chip.value.length > 28) return true
-  if (chip.value && (chip.value.startsWith('http://') || chip.value.startsWith('https://'))) return true
-  return false
-}
-
-const draggingChipId = ref<string | null>(null)
-
-function onChipDragStart(e: DragEvent, chip: ActiveTagChip) {
-  if (!props.editable) return
-  draggingChipId.value = chip.id
-  if (e.dataTransfer) {
-    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'inner-chip', id: chip.id }))
-    e.dataTransfer.effectAllowed = 'move'
-  }
-}
-
-function onChipDrop(e: DragEvent, targetChip: ActiveTagChip) {
-  if (!props.editable) return
-  e.preventDefault()
-  if (!draggingChipId.value || draggingChipId.value === targetChip.id) return
-
-  const srcId = draggingChipId.value
-  draggingChipId.value = null
-
-  if (!props.resumeData) return
-  const rd = { ...props.resumeData }
-  if (!rd.basics) rd.basics = {}
-
-  let order: string[] = Array.isArray(rd.basics.tag_order) && rd.basics.tag_order.length > 0
-    ? [...rd.basics.tag_order]
-    : activeHeaderChips.value.map((c) => c.id)
-
-  const srcIdx = order.indexOf(srcId)
-  const targetIdx = order.indexOf(targetChip.id)
-
-  if (srcIdx !== -1 && targetIdx !== -1) {
-    order.splice(srcIdx, 1)
-    order.splice(targetIdx, 0, srcId)
-  } else {
-    order = activeHeaderChips.value.map((c) => c.id)
-    const sI = order.indexOf(srcId)
-    const tI = order.indexOf(targetChip.id)
-    if (sI !== -1 && tI !== -1) {
-      order.splice(sI, 1)
-      order.splice(tI, 0, srcId)
-    }
-  }
-
-  rd.basics.tag_order = order
-  emit('update:resume-data', rd)
-  emit('change', 'basics')
 }
 
 defineExpose({
@@ -542,188 +697,247 @@ defineExpose({
           fontFamily: `-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`,
         }"
       >
-        <!-- ================= 1. Header (严整对齐网格磁吸槽: 左侧姓名/意向/双列网格/总结 + 右侧证件照) ================= -->
+        <!-- ================= 1. Header (12 栅格自适应个人信息板：所有组件支持自由拖拽、设定列宽，拖动时浮现网格) ================= -->
         <header
           v-if="isSectionVisible('basics')"
-          class="header-section group/header relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-2.5"
-          :class="isHeaderDraggingOver ? 'bg-primary-50/70 ring-2 ring-dashed ring-primary-500 shadow-sm' : 'hover:bg-slate-50/40'"
+          class="header-section relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-3 select-text"
+          :class="{
+            'ring-2 ring-primary-500 ring-dashed bg-primary-50/20 shadow-sm': isDraggingActive,
+            'hover:bg-slate-50/40': !isDraggingActive,
+          }"
           @dragover="handleHeaderDragOver"
           @dragleave="handleHeaderDragLeave"
           @drop="handleHeaderDrop"
         >
-          <!-- 拖拽悬停吸附指示框 -->
+          <!-- 只有在拖拽时才点亮的 12 栅格蓝图辅助对齐导轨 (平时 100% 彻底隐形) -->
           <div
-            v-if="isHeaderDraggingOver"
-            class="absolute inset-0 bg-primary-50/90 backdrop-blur-xs rounded-xl flex items-center justify-center z-30 pointer-events-none border-2 border-dashed border-primary-500 animate-pulse"
+            v-if="isDraggingActive"
+            class="pointer-events-none absolute inset-0 z-10 grid grid-cols-12 gap-3 p-3 rounded-xl transition-all duration-200"
           >
-            <div class="px-5 py-2.5 bg-white rounded-xl shadow-lg border border-primary-200 text-primary-700 font-bold text-xs flex items-center gap-2">
-              <span class="text-xl">🎯</span>
-              <span>松开鼠标，将标签精准吸附至简历网格</span>
+            <div
+              v-for="col in 12"
+              :key="col"
+              class="h-full rounded-md border border-dashed border-primary-300/80 bg-primary-500/5 flex flex-col items-center justify-between py-1 transition-all"
+            >
+              <span class="text-[9px] font-mono text-primary-500 font-bold select-none opacity-80">{{ col }}</span>
+              <div class="h-full w-px border-r border-dashed border-primary-200/50 my-1"></div>
+              <span class="text-[8px] font-mono text-primary-400 select-none opacity-50">C{{ col }}</span>
             </div>
           </div>
 
-          <!-- 头部主体：左侧信息区 (姓名+意向+双列对齐网格+总结) + 右侧证件照 -->
-          <div class="flex justify-between items-start gap-6">
-            <div class="flex-1 min-w-0 space-y-2.5">
-              <!-- 1. 姓名与求职意向 (置顶左对齐，层级分明) -->
-              <div class="flex items-baseline gap-3.5 flex-wrap">
-                <!-- 姓名 (支持原地点击改字) -->
-                <div v-if="editingField === 'name'" class="inline-block">
+          <!-- 拖拽悬停至整个头部时的吸附高亮条 -->
+          <div
+            v-if="isHeaderDraggingOver"
+            class="absolute top-1 left-1/2 -translate-x-1/2 z-30 pointer-events-none px-4 py-1.5 bg-primary-600 text-white rounded-full shadow-lg text-[11px] font-bold flex items-center gap-1.5 animate-bounce"
+          >
+            <span>🎯</span>
+            <span>松开鼠标，将组件吸附至 12 栅格画板</span>
+          </div>
+
+          <!-- 12 栅格核心组件流排版 -->
+          <div class="relative z-20 grid grid-cols-12 gap-x-4 gap-y-2.5 items-center">
+            <div
+              v-for="(widget, idx) in activeGridWidgets"
+              :key="widget.id"
+              class="grid-widget-item group/widget relative rounded-lg transition-all"
+              :style="{ gridColumn: `span ${Math.min(12, Math.max(1, widget.cols || 4))}` }"
+              :class="[
+                dragOverWidgetId === widget.id ? 'ring-2 ring-primary-500 scale-[1.01] bg-primary-50/50 shadow-xs' : '',
+                editable ? 'hover:ring-1 hover:ring-primary-300/80 hover:bg-slate-50/80 p-1.5' : 'p-0.5'
+              ]"
+              :draggable="editable"
+              @dragstart="onWidgetDragStart($event, widget)"
+              @dragover="onWidgetDragOver($event, widget)"
+              @drop="onWidgetDrop($event, widget)"
+            >
+              <!-- 悬停微型控制条: 尺寸调节 (2格/3格/4格/6格/12格) + 拖动手柄 + 下板 (×) -->
+              <div
+                v-if="editable"
+                class="widget-ctrl-bar absolute -top-3.5 right-1 flex items-center gap-1 bg-white/95 backdrop-blur-xs shadow-md border border-slate-200/90 rounded-md px-1.5 py-0.5 z-30 opacity-0 group-hover/widget:opacity-100 transition-opacity"
+              >
+                <!-- 尺寸快速切换按钮组 -->
+                <div class="flex items-center gap-0.5 text-[9px] font-mono text-slate-500">
+                  <span class="text-slate-400 mr-0.5 scale-90 select-none">格数:</span>
+                  <button
+                    v-for="col in [2, 3, 4, 6, 12]"
+                    :key="col"
+                    class="px-1 py-0.2 rounded transition font-medium"
+                    :class="widget.cols === col ? 'bg-primary-600 text-white font-bold' : 'hover:bg-slate-100 text-slate-600'"
+                    :title="`设定占 ${col} 格 (${Math.round((col / 12) * 100)}% 宽度)`"
+                    @click.stop="setWidgetCols(widget, col)"
+                  >
+                    {{ col === 12 ? '全宽' : `${col}格` }}
+                  </button>
+                </div>
+
+                <span class="w-[1px] h-2.5 bg-slate-200"></span>
+
+                <!-- 拖动换高手柄 -->
+                <span
+                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 text-xs px-0.5 select-none"
+                  title="按住拖拽互换网格顺序"
+                >
+                  ⠿
+                </span>
+
+                <!-- 下板按钮 -->
+                <button
+                  class="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded px-1 text-xs font-bold leading-none transition"
+                  title="下板移出画板"
+                  @click.stop="removeWidget(widget)"
+                >
+                  ×
+                </button>
+              </div>
+
+              <!-- ================= 各组件内容具体分支渲染 ================= -->
+
+              <!-- 1. 姓名组件 -->
+              <div v-if="widget.type === 'name' || widget.id === 'core_name'" class="flex items-baseline gap-2">
+                <div v-if="editingWidgetId === widget.id" class="w-full">
                   <input
-                    id="inline-field-name"
-                    v-model="editingFieldValue"
-                    placeholder="姓名"
-                    class="text-3xl font-extrabold tracking-wider text-slate-950 font-sans border-b-2 border-primary-500 outline-none px-1 bg-primary-50/30 rounded"
-                    @keydown.enter="finishEditField('name')"
-                    @blur="finishEditField('name')"
+                    :id="`inline-input-${widget.id}`"
+                    v-model="editingWidgetValue"
+                    placeholder="输入姓名"
+                    class="text-2xl font-extrabold tracking-wider text-slate-950 font-sans border-b-2 border-primary-500 outline-none w-full bg-primary-50/30 px-1 rounded"
+                    @keydown.enter="finishEditWidget(widget)"
+                    @blur="finishEditWidget(widget)"
                   />
                 </div>
                 <h1
                   v-else
-                  class="group/name text-3xl font-extrabold tracking-wider font-sans cursor-pointer transition flex items-baseline gap-1"
-                  :class="basics.name ? 'text-slate-950 hover:text-primary-600' : 'text-slate-300 hover:text-primary-500 italic font-normal'"
-                  title="点击直接修改姓名"
-                  @click="startEditField('name')"
+                  class="font-extrabold tracking-wider font-sans cursor-pointer transition flex items-baseline gap-1.5"
+                  :class="[
+                    widget.cols >= 6 ? 'text-3xl' : 'text-2xl',
+                    widget.value ? 'text-slate-950 hover:text-primary-600' : 'text-slate-300 hover:text-primary-500 italic font-normal'
+                  ]"
+                  title="点击原地编辑姓名"
+                  @click="startEditWidget(widget)"
                 >
-                  <span>{{ basics.name || '（点击输入姓名）' }}</span>
-                  <span class="text-xs text-slate-300 group-hover/name:text-primary-500 opacity-0 group-hover/name:opacity-100 transition not-italic">✎</span>
+                  <span>{{ widget.value || '（点击输入姓名）' }}</span>
+                  <span v-if="editable" class="text-xs text-slate-300 group-hover/widget:text-primary-500 opacity-0 group-hover/widget:opacity-100 transition not-italic">✎</span>
                 </h1>
+              </div>
 
-                <!-- 求职意向 (头衔徽标) -->
-                <div v-if="basics.label || basics.title || editable" class="flex items-center gap-1.5">
-                  <span class="text-[11px] text-slate-400 font-medium">求职意向:</span>
-                  <div v-if="editingField === 'label'" class="inline-block">
-                    <input
-                      id="inline-field-label"
-                      v-model="editingFieldValue"
-                      placeholder="如：全栈开发工程师"
-                      class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 bg-primary-50/30 rounded"
-                      @keydown.enter="finishEditField('label')"
-                      @blur="finishEditField('label')"
-                    />
+              <!-- 2. 求职意向组件 -->
+              <div v-else-if="widget.type === 'label' || widget.id === 'core_label'" class="flex items-center gap-1.5">
+                <span class="text-[11px] text-slate-400 font-medium shrink-0">求职意向:</span>
+                <div v-if="editingWidgetId === widget.id" class="flex-1 min-w-0">
+                  <input
+                    :id="`inline-input-${widget.id}`"
+                    v-model="editingWidgetValue"
+                    placeholder="如：全栈开发工程师"
+                    class="border-b border-primary-500 outline-none text-xs font-bold text-slate-900 px-1 py-0.5 w-full bg-primary-50/30 rounded"
+                    @keydown.enter="finishEditWidget(widget)"
+                    @blur="finishEditWidget(widget)"
+                  />
+                </div>
+                <div
+                  v-else
+                  class="cursor-pointer hover:text-primary-600 flex items-center gap-1 transition px-2 py-0.5 rounded border text-xs"
+                  :class="widget.value ? 'text-slate-800 bg-slate-100/90 border-slate-200/90 font-bold' : 'text-slate-400 bg-slate-50 border-dashed border-slate-200 italic font-normal'"
+                  title="点击原地编辑求职意向"
+                  @click="startEditWidget(widget)"
+                >
+                  <span class="truncate">{{ widget.value || '+ 设置意向岗位' }}</span>
+                  <span v-if="editable" class="text-[10px] text-slate-300 group-hover/widget:text-primary-500 opacity-0 group-hover/widget:opacity-100 transition not-italic">✎</span>
+                </div>
+              </div>
+
+              <!-- 3. 免冠证件照组件 -->
+              <div v-else-if="widget.type === 'photo' || widget.id === 'core_photo'" class="flex items-center justify-center">
+                <div
+                  class="relative group/photo border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs cursor-pointer hover:ring-2 hover:ring-primary-400 transition"
+                  :style="{
+                    width: widget.cols >= 4 ? '92px' : '72px',
+                    height: widget.cols >= 4 ? '122px' : '96px',
+                  }"
+                  title="点击设置免冠照链接"
+                  @click="promptEditPhoto(widget)"
+                >
+                  <img
+                    v-if="widget.value"
+                    :src="widget.value"
+                    class="w-full h-full object-cover"
+                    alt="证件照"
+                  />
+                  <div v-else class="text-center text-slate-300 flex flex-col items-center justify-center h-full p-1 select-none">
+                    <span class="text-2xl">👤</span>
+                    <span class="text-[9px] scale-90">上传照</span>
                   </div>
-                  <div
-                    v-else
-                    class="group/title text-xs cursor-pointer hover:text-primary-600 flex items-center gap-1 transition px-2 py-0.5 rounded border"
-                    :class="basics.label || basics.title ? 'text-slate-800 bg-slate-100/90 border-slate-200/90 font-bold' : 'text-slate-400 bg-slate-50 border-dashed border-slate-200 italic font-normal'"
-                    title="点击直接原地修改意向头衔"
-                    @click="startEditField('label')"
-                  >
-                    <span>{{ basics.label || basics.title || '+ 点击设置意向岗位' }}</span>
-                    <span class="text-[10px] text-slate-300 group-hover/title:text-primary-500 opacity-0 group-hover/title:opacity-100 transition not-italic">✎</span>
+                  <div v-if="editable" class="absolute inset-0 bg-black/40 text-white text-[10px] flex items-center justify-center opacity-0 group-hover/photo:opacity-100 transition font-medium">
+                    更换
                   </div>
                 </div>
               </div>
 
-              <!-- 2. 严整的双列网格联系方式与属性 (对齐线笔直，短项占1格，长项跨2格) -->
-              <div class="grid grid-cols-2 gap-x-8 gap-y-1 text-xs text-slate-700 font-sans pt-0.5">
-                <div
-                  v-for="chip in activeHeaderChips"
-                  :key="chip.id"
-                  class="group/chip relative flex items-center justify-between gap-1.5 py-0.5 px-1.5 rounded transition-all hover:bg-slate-100/70"
-                  :class="isLongChip(chip) ? 'col-span-2' : 'col-span-1'"
-                  draggable="true"
-                  @dragstart="onChipDragStart($event, chip)"
-                  @dragover.prevent
-                  @drop="onChipDrop($event, chip)"
-                >
-                  <div class="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span class="text-xs shrink-0 select-none opacity-85">{{ chip.icon }}</span>
-                    <span class="font-semibold text-slate-500 text-[11px] shrink-0">{{ chip.label }}:</span>
-
-                    <!-- 原地编辑输入框 -->
-                    <div v-if="editingChipId === chip.id" class="flex-1 min-w-0">
-                      <input
-                        :id="`inline-chip-input-${chip.id}`"
-                        v-model="editingChipValue"
-                        class="border-b border-primary-500 outline-none bg-white text-[11px] font-mono px-1 py-0.5 w-full rounded text-slate-900 shadow-2xs"
-                        @keydown.enter="finishEditChip(chip)"
-                        @blur="finishEditChip(chip)"
-                      />
-                    </div>
-
-                    <!-- 原地展示文本 (点击即编辑) -->
-                    <span
-                      v-else
-                      class="font-mono text-slate-800 text-[11px] truncate flex-1 cursor-pointer hover:text-primary-600 hover:underline"
-                      title="点击原地编辑内容"
-                      @click="startEditChip(chip)"
-                    >
-                      {{ chip.value }}
-                    </span>
-                  </div>
-
-                  <!-- 移出标签快捷按钮 (x) & 拖动手柄 -->
-                  <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover/chip:opacity-100 transition">
-                    <span class="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-600 text-xs px-0.5 select-none" title="按住拖拽互换顺序">⠿</span>
-                    <button
-                      v-if="editable"
-                      class="text-slate-400 hover:text-red-600 text-xs font-bold leading-none px-0.5"
-                      title="移出此标签"
-                      @click="removeTagFromHeader(chip, $event)"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 空态吸附提示 (当没有任何标签时且在编辑态下显示微弱提示) -->
-                <div
-                  v-if="!activeHeaderChips.length && editable"
-                  class="col-span-2 py-2 px-3 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs flex items-center justify-center gap-1.5 bg-slate-50/40 select-none"
-                >
-                  <span class="text-xs opacity-60">🏷️</span>
-                  <span class="text-[11px]">暂无联系方式，可从左侧标签积木池点击或拖入【电话、微信、邮箱】等</span>
-                </div>
-              </div>
-
-              <!-- 3. 一句话优势 / 自我总结 (通栏对齐) -->
-              <div v-if="basics.summary || editable" class="pt-1 border-t border-slate-100">
-                <div v-if="editingField === 'summary'">
+              <!-- 4. 核心优势总结组件 -->
+              <div v-else-if="widget.type === 'summary' || widget.id === 'core_summary'" class="w-full pt-0.5">
+                <div v-if="editingWidgetId === widget.id">
                   <textarea
-                    id="inline-field-summary"
-                    v-model="editingFieldValue"
+                    :id="`inline-input-${widget.id}`"
+                    v-model="editingWidgetValue"
                     placeholder="输入个人核心技术特长与综合优势总结…"
                     rows="2"
-                    class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1.5 outline-none bg-primary-50/20"
-                    @keydown.enter.ctrl="finishEditField('summary')"
-                    @blur="finishEditField('summary')"
+                    class="w-full text-xs text-slate-700 leading-relaxed border border-primary-300 rounded p-1.5 outline-none bg-primary-50/20 font-sans"
+                    @keydown.enter.ctrl="finishEditWidget(widget)"
+                    @blur="finishEditWidget(widget)"
                   />
                   <div class="text-[10px] text-slate-400 text-right">按 Ctrl+Enter 或点击空白处完成</div>
                 </div>
-                <p
-                  v-else-if="basics.summary"
-                  class="group/summary text-xs text-slate-600 leading-relaxed cursor-pointer hover:text-slate-900 transition flex items-start gap-1"
-                  title="点击原地修改个人技术特长与优势总结"
-                  @click="startEditField('summary')"
-                >
-                  <span class="flex-1">{{ basics.summary }}</span>
-                  <span class="text-[10px] text-slate-300 group-hover/summary:text-primary-500 opacity-0 group-hover/summary:opacity-100 transition shrink-0">✎</span>
-                </p>
                 <div
-                  v-else-if="editable"
-                  class="text-[11px] text-slate-300 hover:text-primary-600 cursor-pointer py-0.5 flex items-center gap-1 italic transition select-none"
-                  title="点击添加个人核心优势总结"
-                  @click="startEditField('summary')"
+                  v-else
+                  class="cursor-pointer hover:bg-slate-50 p-1 rounded transition group/sum flex items-start gap-1.5"
+                  @click="startEditWidget(widget)"
                 >
-                  <span>+ 添加一句话优势总结 (可选)</span>
+                  <span class="text-xs font-bold text-primary-600 shrink-0 select-none">💡 优势:</span>
+                  <p
+                    class="text-xs text-slate-600 leading-relaxed flex-1 font-sans"
+                    :class="{ 'text-slate-300 italic': !widget.value }"
+                  >
+                    {{ widget.value || '+ 添加一句话核心优势总结 (可选)' }}
+                  </p>
+                  <span v-if="editable" class="text-[10px] text-slate-300 group-hover/widget:text-primary-500 opacity-0 group-hover/widget:opacity-100 transition shrink-0">✎</span>
                 </div>
+              </div>
+
+              <!-- 5. 常规联系方式与个性化属性标签组件 -->
+              <div v-else class="flex items-center gap-1.5 text-xs min-w-0">
+                <span class="text-xs shrink-0 select-none opacity-85">{{ widget.icon || '🏷️' }}</span>
+                <span class="font-semibold text-slate-500 text-[11px] shrink-0">{{ widget.label }}:</span>
+
+                <!-- 原地编辑输入框 -->
+                <div v-if="editingWidgetId === widget.id" class="flex-1 min-w-0">
+                  <input
+                    :id="`inline-input-${widget.id}`"
+                    v-model="editingWidgetValue"
+                    class="border-b border-primary-500 outline-none bg-white text-[11px] font-mono px-1 py-0.5 w-full rounded text-slate-900 shadow-2xs"
+                    @keydown.enter="finishEditWidget(widget)"
+                    @blur="finishEditWidget(widget)"
+                  />
+                </div>
+
+                <!-- 原地展示文本 (点击即编辑) -->
+                <span
+                  v-else
+                  class="font-mono text-slate-800 text-[11px] truncate flex-1 cursor-pointer hover:text-primary-600 hover:underline"
+                  title="点击原地编辑内容"
+                  @click="startEditWidget(widget)"
+                >
+                  {{ widget.value || '点击输入' }}
+                </span>
               </div>
             </div>
 
-            <!-- 右侧免冠证件照（仅在有照片或明确开启时显示） -->
-            <div v-if="basics.photo || basics.avatar || basics.show_photo" class="shrink-0 flex flex-col items-center justify-start pt-1">
-              <div class="w-[82px] h-[108px] border border-slate-300 rounded bg-slate-100 overflow-hidden shadow-2xs flex items-center justify-center shrink-0">
-                <img
-                  v-if="basics.photo || basics.avatar"
-                  :src="basics.photo || basics.avatar"
-                  class="w-full h-full object-cover"
-                  alt="证件照"
-                />
-                <div v-else class="text-center text-slate-300 flex flex-col items-center justify-center h-full p-1 select-none">
-                  <span class="text-2xl">👤</span>
-                  <span class="text-[9px] scale-90">免冠照</span>
-                </div>
+            <!-- 空态吸附提示 (当没有任何组件时) -->
+            <div
+              v-if="!activeGridWidgets.length && editable"
+              class="col-span-12 py-6 px-4 rounded-xl border-2 border-dashed border-slate-200 text-slate-400 text-xs flex flex-col items-center justify-center gap-2 bg-slate-50/40 select-none"
+            >
+              <div class="text-2xl">🧱</div>
+              <div class="font-medium text-slate-600">个人信息 12 栅格已就绪（暂无组件）</div>
+              <div class="text-[11px] text-slate-400">
+                从左侧积木池点击或拖入【姓名、求职意向、联系电话、照片、核心优势】等任意积木自由拼配
               </div>
             </div>
           </div>

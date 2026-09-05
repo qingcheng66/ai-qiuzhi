@@ -3,11 +3,13 @@ import { ref, computed } from 'vue'
 
 export interface TagItem {
   id: string
+  type?: 'name' | 'label' | 'photo' | 'summary' | 'tag' | 'custom'
   key?: string
   label: string
   value: string
   icon: string
-  category: 'contact' | 'status' | 'profile' | 'social' | 'custom'
+  category: 'core' | 'contact' | 'status' | 'profile' | 'social' | 'custom'
+  defaultCols: number
   isCustom?: boolean
 }
 
@@ -20,36 +22,42 @@ const emit = defineEmits<{
   (e: 'remove-tag', tag: TagItem): void
 }>()
 
-// 预设丰富标签池
+// 预设丰富标签与核心排版组件池 (含推荐 12 栅格默认占据格数)
 const PRESET_TAGS: TagItem[] = [
+  // 0. 核心排版组件 (可自由拖入网格 / 设尺寸)
+  { id: 'core_name', type: 'name', key: 'name', label: '姓名', value: '您的姓名', icon: '👤', category: 'core', defaultCols: 6 },
+  { id: 'core_label', type: 'label', key: 'label', label: '求职意向', value: '前端开发工程师', icon: '🎯', category: 'core', defaultCols: 6 },
+  { id: 'core_photo', type: 'photo', key: 'photo', label: '免冠证件照', value: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200', icon: '📷', category: 'core', defaultCols: 3 },
+  { id: 'core_summary', type: 'summary', key: 'summary', label: '一句话优势总结', value: '5年大厂研发经验，主导核心高并发系统与中后台架构设计。', icon: '✨', category: 'core', defaultCols: 12 },
+
   // 1. 核心联系
-  { id: 'phone', key: 'phone', label: '联系电话', value: '13800138000', icon: '📞', category: 'contact' },
-  { id: 'email', key: 'email', label: '电子邮箱', value: 'job@example.com', icon: '✉️', category: 'contact' },
-  { id: 'wechat', key: 'custom', label: '微信号', value: 'wx_hireme', icon: '💬', category: 'contact' },
-  { id: 'location', key: 'location', label: '所在城市', value: '北京 / 上海 / 深圳', icon: '📍', category: 'contact' },
+  { id: 'phone', type: 'tag', key: 'phone', label: '联系电话', value: '13800138000', icon: '📞', category: 'contact', defaultCols: 4 },
+  { id: 'email', type: 'tag', key: 'email', label: '电子邮箱', value: 'job@example.com', icon: '✉️', category: 'contact', defaultCols: 4 },
+  { id: 'wechat', type: 'tag', key: 'wechat', label: '微信号', value: 'wx_hireme', icon: '💬', category: 'contact', defaultCols: 4 },
+  { id: 'location', type: 'tag', key: 'location', label: '所在城市', value: '北京 / 上海 / 深圳', icon: '📍', category: 'contact', defaultCols: 4 },
 
   // 2. 求职状态与预期
-  { id: 'status_ready', key: 'custom', label: '求职状态', value: '离职-随时到岗', icon: '🟢', category: 'status' },
-  { id: 'status_look', key: 'custom', label: '求职状态', value: '在职-月内到岗', icon: '🟡', category: 'status' },
-  { id: 'status_grad', key: 'custom', label: '求职状态', value: '2025届应届毕业生', icon: '🎓', category: 'status' },
-  { id: 'exp_years', key: 'custom', label: '工作年限', value: '5年大厂经验', icon: '💼', category: 'status' },
-  { id: 'salary', key: 'custom', label: '期望薪资', value: '25k-35k · 15薪', icon: '💰', category: 'status' },
-  { id: 'target_city', key: 'custom', label: '期望城市', value: '杭州 / 远程', icon: '🎯', category: 'status' },
+  { id: 'status_ready', type: 'tag', key: 'custom', label: '求职状态', value: '离职-随时到岗', icon: '🟢', category: 'status', defaultCols: 4 },
+  { id: 'status_look', type: 'tag', key: 'custom', label: '求职状态', value: '在职-月内到岗', icon: '🟡', category: 'status', defaultCols: 4 },
+  { id: 'status_grad', type: 'tag', key: 'custom', label: '求职状态', value: '2025届应届毕业生', icon: '🎓', category: 'status', defaultCols: 4 },
+  { id: 'exp_years', type: 'tag', key: 'custom', label: '工作年限', value: '5年大厂经验', icon: '💼', category: 'status', defaultCols: 3 },
+  { id: 'salary', type: 'tag', key: 'custom', label: '期望薪资', value: '25k-35k · 15薪', icon: '💰', category: 'status', defaultCols: 4 },
+  { id: 'target_city', type: 'tag', key: 'custom', label: '期望城市', value: '杭州 / 远程', icon: '🎯', category: 'status', defaultCols: 4 },
 
   // 3. 个人属性与资历
-  { id: 'birthDate', key: 'birthDate', label: '出生年月', value: '1998/06', icon: '🎂', category: 'profile' },
-  { id: 'age', key: 'custom', label: '年龄', value: '26岁', icon: '📅', category: 'profile' },
-  { id: 'education_level', key: 'custom', label: '最高学历', value: '统招本科 (985/211)', icon: '🏛️', category: 'profile' },
-  { id: 'political', key: 'custom', label: '政治面貌', value: '中共党员', icon: '🚩', category: 'profile' },
-  { id: 'english', key: 'custom', label: '英语等级', value: 'CET-6 (580分) · 流利商务沟通', icon: '🗣️', category: 'profile' },
-  { id: 'license', key: 'custom', label: '资格认证', value: 'PMP 项目管理专业人士', icon: '📜', category: 'profile' },
-  { id: 'driver', key: 'custom', label: '驾照资质', value: 'C1 驾照 (熟练驾驶)', icon: '🚗', category: 'profile' },
+  { id: 'birthDate', type: 'tag', key: 'birthDate', label: '出生年月', value: '1998/06', icon: '🎂', category: 'profile', defaultCols: 3 },
+  { id: 'age', type: 'tag', key: 'custom', label: '年龄', value: '26岁', icon: '📅', category: 'profile', defaultCols: 3 },
+  { id: 'education_level', type: 'tag', key: 'custom', label: '最高学历', value: '统招本科 (985/211)', icon: '🏛️', category: 'profile', defaultCols: 4 },
+  { id: 'political', type: 'tag', key: 'custom', label: '政治面貌', value: '中共党员', icon: '🚩', category: 'profile', defaultCols: 3 },
+  { id: 'english', type: 'tag', key: 'custom', label: '英语等级', value: 'CET-6 (580分) · 流利商务沟通', icon: '🗣️', category: 'profile', defaultCols: 6 },
+  { id: 'license', type: 'tag', key: 'custom', label: '资格认证', value: 'PMP 项目管理专业人士', icon: '📜', category: 'profile', defaultCols: 6 },
+  { id: 'driver', type: 'tag', key: 'custom', label: '驾照资质', value: 'C1 驾照 (熟练驾驶)', icon: '🚗', category: 'profile', defaultCols: 3 },
 
   // 4. 主页与作品
-  { id: 'github', key: 'github', label: 'GitHub', value: 'https://github.com/username', icon: '🐙', category: 'social' },
-  { id: 'blog', key: 'blog', label: '技术博客', value: 'https://blog.example.com', icon: '🌐', category: 'social' },
-  { id: 'portfolio', key: 'custom', label: '在线作品集', value: 'https://portfolio.me', icon: '🎨', category: 'social' },
-  { id: 'juejin', key: 'custom', label: '掘金/知乎', value: '掘金 Lv5 优秀作者', icon: '📘', category: 'social' },
+  { id: 'github', type: 'tag', key: 'github', label: 'GitHub', value: 'https://github.com/username', icon: '🐙', category: 'social', defaultCols: 6 },
+  { id: 'blog', type: 'tag', key: 'blog', label: '技术博客', value: 'https://blog.example.com', icon: '🌐', category: 'social', defaultCols: 6 },
+  { id: 'portfolio', type: 'tag', key: 'custom', label: '在线作品集', value: 'https://portfolio.me', icon: '🎨', category: 'social', defaultCols: 6 },
+  { id: 'juejin', type: 'tag', key: 'custom', label: '掘金/知乎', value: '掘金 Lv5 优秀作者', icon: '📘', category: 'social', defaultCols: 6 },
 ]
 
 // 用户自建标签列表 (从 localStorage 恢复)
@@ -66,7 +74,7 @@ try {
 }
 
 // 标签分类过滤
-const activeCategory = ref<'all' | 'contact' | 'status' | 'profile' | 'social' | 'custom'>('all')
+const activeCategory = ref<'all' | 'core' | 'contact' | 'status' | 'profile' | 'social' | 'custom'>('all')
 
 const allAvailableTags = computed(() => {
   const list = [...PRESET_TAGS, ...userCustomTags.value]
@@ -77,27 +85,43 @@ const allAvailableTags = computed(() => {
 // 检查某个标签当前是否已经在简历画板上
 function isTagOnCanvas(tag: TagItem): boolean {
   const b = props.resumeData?.basics || {}
-  // 标准字段
-  if (tag.key && ['phone', 'email', 'location', 'birthDate', 'github', 'blog'].includes(tag.key)) {
+  const gw: any[] = Array.isArray(b.grid_widgets) ? b.grid_widgets : []
+  if (gw.length > 0) {
+    return gw.some((w: any) =>
+      w.id === tag.id ||
+      (tag.key && w.key === tag.key && tag.key !== 'custom') ||
+      (tag.type && w.type === tag.type && w.type !== 'tag') ||
+      w.label === tag.label
+    )
+  }
+
+  // 传统兼容性判定
+  if (tag.id === 'core_name' || tag.type === 'name') return Boolean(b.name)
+  if (tag.id === 'core_label' || tag.type === 'label') return Boolean(b.label || b.title)
+  if (tag.id === 'core_photo' || tag.type === 'photo') return Boolean(b.photo || b.avatar)
+  if (tag.id === 'core_summary' || tag.type === 'summary') return Boolean(b.summary)
+  if (tag.key && ['phone', 'email', 'location', 'birthDate', 'github', 'blog', 'wechat'].includes(tag.key)) {
     return Boolean(b[tag.key])
   }
-  // 自定义字段
   const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
   return cfs.some((cf: any) => cf.label === tag.label)
 }
 
-// 拖拽开始：设置 HTML5 Drag 数据
+// 拖拽开始：设置 HTML5 Drag 数据，并携带推荐网格跨度
 function onDragStart(e: DragEvent, tag: TagItem) {
   if (!e.dataTransfer) return
   const payload = {
-    type: 'tag',
+    type: 'grid-widget',
     data: {
       id: tag.id,
+      widgetType: tag.type || (tag.category === 'core' ? tag.key : 'tag'),
       key: tag.key || 'custom',
       label: tag.label,
       value: tag.value,
       icon: tag.icon,
+      cols: tag.defaultCols || 4,
       category: tag.category,
+      isCustom: tag.isCustom,
     },
   }
   e.dataTransfer.setData('application/json', JSON.stringify(payload))
@@ -153,6 +177,8 @@ function onPaletteDrop(e: DragEvent) {
     const payload = JSON.parse(raw)
     if (payload.type === 'inner-chip' && payload.id) {
       emit('remove-tag', { id: payload.id, label: '' } as any)
+    } else if (payload.type === 'grid-widget-move' && payload.id) {
+      emit('remove-tag', { id: payload.id, label: '' } as any)
     }
   } catch (err) {
     console.error('Failed to drop chip back to palette:', err)
@@ -181,6 +207,7 @@ function createCustomTag() {
     value: val || `${label}内容`,
     icon: newTagForm.value.icon || '🏷️',
     category: 'custom',
+    defaultCols: 4,
     isCustom: true,
   }
 
@@ -248,6 +275,7 @@ function deleteUserTag(tagId: string, e: MouseEvent) {
         <button
           v-for="cat in [
             { id: 'all', label: '全部' },
+            { id: 'core', label: '核心' },
             { id: 'contact', label: '联系' },
             { id: 'status', label: '求职' },
             { id: 'profile', label: '属性' },
@@ -281,8 +309,15 @@ function deleteUserTag(tagId: string, e: MouseEvent) {
         <div class="flex items-center gap-2 min-w-0 flex-1">
           <span class="text-base shrink-0 select-none">{{ tag.icon }}</span>
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 flex-wrap">
               <span class="font-bold text-slate-800 text-[11px] truncate">{{ tag.label }}</span>
+              <!-- 推荐格数标识 -->
+              <span class="text-[9px] px-1 py-0.2 rounded font-mono border"
+                :class="tag.defaultCols === 12 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-500 border-slate-200'"
+                title="默认占据 12 栅格中的格数"
+              >
+                {{ tag.defaultCols === 12 ? '全宽12格' : `${tag.defaultCols}格` }}
+              </span>
               <span
                 v-if="isTagOnCanvas(tag)"
                 class="text-[9px] px-1 py-0.2 rounded bg-primary-100 text-primary-700 font-medium"

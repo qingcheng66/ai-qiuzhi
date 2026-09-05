@@ -13,23 +13,61 @@ const leftPanelMode = ref<'palette' | 'outline'>('palette')
 function handleAddTagFromPalette(tag: any) {
   if (!resume.value) return
   if (!resume.value.basics) resume.value.basics = {}
-  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
-  if (tag.key && standardKeys.includes(tag.key)) {
-    resume.value.basics[tag.key] = tag.value || resume.value.basics[tag.key] || `${tag.label}内容`
+  const b = resume.value.basics
+
+  const widgetType = tag.type || (tag.category === 'core' ? tag.key : 'tag')
+  const newWidget = {
+    id: tag.id || `widget_${Date.now()}`,
+    type: widgetType,
+    key: tag.key || 'custom',
+    label: tag.label,
+    value: tag.value || '',
+    icon: tag.icon || '🏷️',
+    cols: tag.defaultCols || (widgetType === 'summary' ? 12 : widgetType === 'photo' ? 3 : widgetType === 'name' ? 6 : 4),
+    isCustom: tag.category === 'custom' || tag.isCustom,
+  }
+
+  if (!Array.isArray(b.grid_widgets)) {
+    b.grid_widgets = []
+  }
+  const existingIdx = b.grid_widgets.findIndex((w: any) =>
+    w.id === tag.id || (tag.key && w.key === tag.key && tag.key !== 'custom') || (widgetType && w.type === widgetType && widgetType !== 'tag')
+  )
+  if (existingIdx !== -1) {
+    b.grid_widgets[existingIdx] = { ...b.grid_widgets[existingIdx], ...newWidget }
   } else {
-    if (!Array.isArray(resume.value.basics.custom_fields)) {
-      resume.value.basics.custom_fields = []
-    }
-    const existing = resume.value.basics.custom_fields.find((cf: any) => cf.label === tag.label)
-    if (existing) {
-      existing.value = tag.value || existing.value
+    b.grid_widgets.push(newWidget)
+  }
+
+  // 同步基础字段
+  if (tag.id === 'core_name' || widgetType === 'name') {
+    b.name = tag.value || b.name || '求职者姓名'
+  } else if (tag.id === 'core_label' || widgetType === 'label') {
+    b.label = tag.value || b.label || '意向岗位'
+  } else if (tag.id === 'core_photo' || widgetType === 'photo') {
+    b.photo = tag.value || b.photo || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+  } else if (tag.id === 'core_summary' || widgetType === 'summary') {
+    b.summary = tag.value || b.summary || '具备扎实的核心专业能力与综合解决问题经验。'
+  } else {
+    const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog', 'wechat']
+    if (tag.key && standardKeys.includes(tag.key)) {
+      b[tag.key] = tag.value || b[tag.key] || `${tag.label}内容`
     } else {
-      resume.value.basics.custom_fields.push({
-        id: tag.id || `cf_${Date.now()}`,
-        label: tag.label,
-        value: tag.value || '点击编辑内容',
-        icon: tag.icon || '🏷️',
-      })
+      if (!Array.isArray(b.custom_fields)) {
+        b.custom_fields = []
+      }
+      const existing = b.custom_fields.find((cf: any) => cf.label === tag.label)
+      if (existing) {
+        existing.value = tag.value || existing.value
+      } else {
+        b.custom_fields.push({
+          id: tag.id || `cf_${Date.now()}`,
+          label: tag.label,
+          value: tag.value || '点击编辑内容',
+          icon: tag.icon || '🏷️',
+          cols: tag.defaultCols || 4,
+        })
+      }
     }
   }
   triggerAutoSave()
@@ -39,24 +77,44 @@ function handleAddTagFromPalette(tag: any) {
 function handleRemoveTagFromPalette(tag: any) {
   if (!resume.value || !resume.value.basics) return
   const b = resume.value.basics
-  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
 
-  if (tag.key && standardKeys.includes(tag.key)) {
-    b[tag.key] = ''
-  } else if (tag.id && tag.id.startsWith('std_')) {
-    const key = tag.id.replace('std_', '')
-    b[key] = ''
+  if (Array.isArray(b.grid_widgets)) {
+    b.grid_widgets = b.grid_widgets.filter((w: any) =>
+      w.id !== tag.id &&
+      (!tag.key || w.key !== tag.key || tag.key === 'custom') &&
+      (!tag.type || w.type !== tag.type || tag.type === 'tag') &&
+      w.label !== tag.label
+    )
+  }
+
+  if (tag.id === 'core_name' || tag.type === 'name' || tag.key === 'name') {
+    b.name = ''
+  } else if (tag.id === 'core_label' || tag.type === 'label' || tag.key === 'label') {
+    b.label = ''
+  } else if (tag.id === 'core_photo' || tag.type === 'photo' || tag.key === 'photo') {
+    b.photo = ''
+    delete b.avatar
+  } else if (tag.id === 'core_summary' || tag.type === 'summary' || tag.key === 'summary') {
+    b.summary = ''
   } else {
-    const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
-    if (tag.id && tag.id.startsWith('cf_')) {
-      const idx = parseInt(tag.id.replace('cf_', ''), 10)
-      if (!isNaN(idx) && idx >= 0 && idx < cfs.length) {
-        cfs.splice(idx, 1)
+    const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog', 'wechat']
+    if (tag.key && standardKeys.includes(tag.key)) {
+      b[tag.key] = ''
+    } else if (tag.id && tag.id.startsWith('std_')) {
+      const key = tag.id.replace('std_', '')
+      b[key] = ''
+    } else {
+      const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
+      if (tag.id && tag.id.startsWith('cf_')) {
+        const idx = parseInt(tag.id.replace('cf_', ''), 10)
+        if (!isNaN(idx) && idx >= 0 && idx < cfs.length) {
+          cfs.splice(idx, 1)
+        } else {
+          b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
+        }
       } else {
         b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
       }
-    } else {
-      b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
     }
   }
 
