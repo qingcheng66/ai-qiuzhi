@@ -146,6 +146,8 @@ export const apiSettings = {
     http.post('/settings/llm', data).then((r) => r.data),
   testLlm: (data: { provider: string; api_key: string; base_url?: string; model?: string }) =>
     http.post('/settings/llm/test', data).then((r) => r.data),
+  switchLlm: (provider: string) =>
+    http.post('/settings/llm/switch', { provider }).then((r) => r.data),
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

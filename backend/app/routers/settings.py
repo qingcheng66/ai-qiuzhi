@@ -36,3 +36,16 @@ def test_llm_settings(
 ) -> dict[str, Any]:
     """测试指定模型提供商与 API Key 连通性"""
     return setting_service.test_llm_connection(db, payload.model_dump())
+
+
+class SwitchPayload(BaseModel):
+    provider: str
+
+
+@router.post("/llm/switch")
+def switch_llm_provider(
+    payload: SwitchPayload, db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """像 CC-Switch 一样快速切换当前激活的模型提供商"""
+    return setting_service.switch_active_provider(db, payload.provider)
+
