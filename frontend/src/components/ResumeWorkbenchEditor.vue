@@ -504,14 +504,6 @@ function addCustomSectionItem(sec: CustomSection) {
         </button>
       </div>
 
-      <!-- 动态表单联动提示条 -->
-      <div class="p-2.5 bg-primary-50/60 border border-primary-200 rounded-xl flex items-center justify-between text-xs text-primary-800">
-        <div class="flex items-center gap-2">
-          <span class="text-base">🏷️</span>
-          <span><strong>动态填写表单已联动：</strong>此处仅展示已上板组件的输入框。在左侧【标签积木池】上板或下板，对应填写框会实时联动增减。</span>
-        </div>
-      </div>
-
       <!-- 空态：若尚未上板任何组件 -->
       <div
         v-if="!activeBasicsWidgets.length"

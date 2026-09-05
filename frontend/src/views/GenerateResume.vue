@@ -1460,30 +1460,22 @@ async function doFinalize() {
           <div class="bg-white rounded-xl border border-slate-200 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
             <!-- 顶部双 Tab 切换：🏷️ 标签与积木池 vs 📐 模块大纲 -->
             <div class="p-2 border-b border-slate-100 shrink-0 flex items-center justify-between bg-slate-50/50">
-              <div class="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-xs font-semibold">
+              <div class="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-xs font-semibold w-full">
                 <button
-                  class="px-2.5 py-1 rounded-md transition"
+                  class="flex-1 py-1 rounded-md transition text-center"
                   :class="leftPanelMode === 'palette' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'"
                   @click="leftPanelMode = 'palette'"
                 >
                   🏷️ 标签积木池
                 </button>
                 <button
-                  class="px-2.5 py-1 rounded-md transition"
+                  class="flex-1 py-1 rounded-md transition text-center"
                   :class="leftPanelMode === 'outline' ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'"
                   @click="leftPanelMode = 'outline'"
                 >
                   📐 模块大纲
                 </button>
               </div>
-
-              <button
-                class="text-[11px] text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 px-1.5 py-0.5 rounded transition"
-                title="收起左侧模块栏"
-                @click="isSidePanelCollapsed = true"
-              >
-                « 收起
-              </button>
             </div>
 
             <!-- Tab 1: 标签与积木池 (可拖拽上板) -->
@@ -1498,7 +1490,7 @@ async function doFinalize() {
             <!-- Tab 2: 模块编排列表 -->
             <div v-else class="flex-1 min-h-0 flex flex-col p-3 overflow-hidden">
               <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100 text-[11px] text-slate-400 shrink-0">
-                <span>上下排序 / 显隐开关</span>
+                <span>模块显隐与排序</span>
                 <span>共 {{ allTabs.length }} 个模块</span>
               </div>
               <div class="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
@@ -1516,7 +1508,7 @@ async function doFinalize() {
                     <span class="truncate font-medium">{{ t.label }}</span>
                   </div>
 
-                  <div class="flex items-center gap-0.5 shrink-0 opacity-85 group-hover:opacity-100 transition" @click.stop>
+                  <div class="flex items-center gap-0.5 shrink-0" @click.stop>
                     <button
                       class="p-1 rounded transition hover:scale-110"
                       :class="activeTab === t.id ? 'text-white/80 hover:text-white' : 'text-slate-400 hover:text-slate-600'"
@@ -1527,33 +1519,36 @@ async function doFinalize() {
                       <span v-else class="text-xs">👁️</span>
                     </button>
 
-                    <button
-                      class="p-0.5 text-xs disabled:opacity-20 transition"
-                      :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
-                      :disabled="idx === 0"
-                      @click="moveSection(idx, -1)"
-                      title="上移"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      class="p-0.5 text-xs disabled:opacity-20 transition"
-                      :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
-                      :disabled="idx === allTabs.length - 1"
-                      @click="moveSection(idx, 1)"
-                      title="下移"
-                    >
-                      ↓
-                    </button>
+                    <!-- 上下移动与删除：悬停时才优雅浮现，大幅降低视觉噪点 -->
+                    <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        class="p-0.5 text-xs disabled:opacity-20 transition"
+                        :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
+                        :disabled="idx === 0"
+                        @click="moveSection(idx, -1)"
+                        title="上移"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        class="p-0.5 text-xs disabled:opacity-20 transition"
+                        :class="activeTab === t.id ? 'text-white/70 hover:text-white' : 'text-slate-400 hover:text-slate-700'"
+                        :disabled="idx === allTabs.length - 1"
+                        @click="moveSection(idx, 1)"
+                        title="下移"
+                      >
+                        ↓
+                      </button>
 
-                    <button
-                      class="p-1 text-xs rounded hover:scale-110 transition ml-0.5"
-                      :class="activeTab === t.id ? 'text-white/70 hover:text-red-200' : 'text-slate-400 hover:text-red-500'"
-                      :title="`删除【${t.label}】模块（可随时在添加模块中恢复）`"
-                      @click="confirmDeleteSection(t.id, t.label)"
-                    >
-                      🗑️
-                    </button>
+                      <button
+                        class="p-1 text-xs rounded hover:scale-110 transition ml-0.5"
+                        :class="activeTab === t.id ? 'text-white/70 hover:text-red-200' : 'text-slate-400 hover:text-red-500'"
+                        :title="`删除【${t.label}】模块`"
+                        @click="confirmDeleteSection(t.id, t.label)"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1650,14 +1645,6 @@ async function doFinalize() {
               >
                 <span>✨</span> {{ sectionLoading === activeTab ? 'AI 润色中…' : 'AI 优化本模块' }}
               </button>
-              <button
-                class="text-xs text-slate-400 hover:text-red-600 hover:bg-red-50 px-2 py-0.5 rounded transition flex items-center gap-1 border border-transparent hover:border-red-200"
-                :title="`从简历中删除当前【${allTabs.find(t => t.id === activeTab)?.label}】模块`"
-                @click="confirmDeleteSection(activeTab, allTabs.find(t => t.id === activeTab)?.label || '本模块')"
-              >
-                <span>🗑️</span>
-                <span>删除此模块</span>
-              </button>
             </div>
           </div>
 
@@ -1716,19 +1703,13 @@ async function doFinalize() {
 
             <div class="flex items-center gap-2">
               <button
-                class="px-2 py-0.5 rounded text-[11px] font-medium border transition flex items-center gap-1"
-                :class="previewScale < 1 ? 'bg-primary-50 text-primary-700 border-primary-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                class="px-2.5 py-1 rounded-md text-[11px] font-medium border transition flex items-center gap-1"
+                :class="previewScale < 1 ? 'bg-primary-50 text-primary-700 border-primary-300 font-bold' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
                 :title="previewScale < 1 ? '已启用单页微调压缩' : '点击将超出一页的内容自动智能压缩为一页'"
                 @click="fitToOnePage"
               >
                 <span>📄 一页自适应</span>
                 <span v-if="previewScale < 1" class="text-[10px] text-primary-600 font-bold">({{ Math.round(previewScale * 100) }}%)</span>
-              </button>
-              <button
-                class="btn-secondary !text-[11px] !py-0.5 !px-2 flex items-center gap-1"
-                @click="doExport('pdf')"
-              >
-                <span>💾 导出 PDF</span>
               </button>
               <button v-if="previewMode === 'template'" class="text-primary-600 hover:underline text-xs" @click="refreshPreview">刷新 ⟳</button>
             </div>

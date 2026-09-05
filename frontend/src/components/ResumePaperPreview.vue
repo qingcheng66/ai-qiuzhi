@@ -534,6 +534,23 @@ function setWidgetSize(widget: Header2DWidget, w: number, h: number) {
   }
 }
 
+// 循环切换列宽与行高（大幅精简工具条微型按钮）
+function cycleWidgetWidth(widget: Header2DWidget) {
+  const steps = [3, 4, 6, 12]
+  const currentW = widget.w || 4
+  const idx = steps.indexOf(currentW)
+  const nextW = idx === -1 || idx === steps.length - 1 ? steps[0] : steps[idx + 1]
+  setWidgetSize(widget, nextW, widget.h)
+}
+
+function cycleWidgetHeight(widget: Header2DWidget) {
+  const steps = [1, 2, 3]
+  const currentH = widget.h || 1
+  const idx = steps.indexOf(currentH)
+  const nextH = idx === -1 || idx === steps.length - 1 ? steps[0] : steps[idx + 1]
+  setWidgetSize(widget, widget.w, nextH)
+}
+
 // 从画板上移除组件（下板）
 function removeWidget(widget: Header2DWidget) {
   if (!props.editable) return
@@ -789,42 +806,6 @@ defineExpose({
 
 <template>
   <div class="resume-paper-container flex flex-col items-center w-full overflow-x-auto pb-8 select-text">
-    <!-- 纸质顶部微型控制工具条 -->
-    <div class="w-full flex items-center justify-between pb-2 mb-3 text-xs text-slate-500 border-b border-slate-200/60 shrink-0">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="font-bold text-slate-800">A4 交互式简历画布</span>
-        <span class="text-[10px] text-slate-400 font-normal">（支持基本信息标签拖入吸附、抬头原地改字）</span>
-      </div>
-
-      <!-- 缩放与配色快捷按钮 -->
-      <div class="flex items-center gap-2">
-        <div class="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded text-[10px]">
-          <button
-            class="px-2 py-0.5 rounded transition font-medium"
-            :class="internalZoom === 0.68 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
-            @click="internalZoom = 0.68"
-          >
-            适屏 68%
-          </button>
-          <button
-            class="px-2 py-0.5 rounded transition font-medium"
-            :class="internalZoom === 0.85 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
-            @click="internalZoom = 0.85"
-          >
-            85%
-          </button>
-          <button
-            class="px-2 py-0.5 rounded transition font-medium"
-            :class="internalZoom === 1.0 ? 'bg-white text-primary-700 shadow-2xs font-bold' : 'text-slate-500 hover:text-slate-800'"
-            @click="internalZoom = 1.0"
-          >
-            100%
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 真实 210mm x 297mm 标准 A4 纸张画布 -->
     <div
       class="a4-paper-wrapper transition-all duration-150 origin-top"
@@ -915,56 +896,49 @@ defineExpose({
               :draggable="editable"
               @dragstart="onWidgetDragStart($event, widget)"
             >
-              <!-- 悬停控制条: 宽度 (2/3/4/6/12列) + 高度 (1/2/3行) + 拖拽手柄 + 下板 (×) -->
+              <!-- 极简微型控制胶囊: 拖动手柄 ⠿ + 宽度循环 + 高度循环(多行组件) + 下板 × -->
               <div
                 v-if="editable"
-                class="widget-ctrl-bar absolute -top-3.5 right-1 flex items-center gap-1 bg-white/95 backdrop-blur-xs shadow-md border border-slate-200/90 rounded-md px-1.5 py-0.5 z-30 opacity-0 group-hover/widget:opacity-100 transition-opacity"
+                class="widget-ctrl-bar absolute -top-3.5 right-1 flex items-center gap-1.5 bg-white/95 backdrop-blur-xs shadow-sm border border-slate-200/90 rounded-full px-2 py-0.5 z-30 opacity-0 group-hover/widget:opacity-100 transition-all text-[10px] select-none"
               >
-                <!-- 宽度选择 -->
-                <div class="flex items-center gap-0.5 text-[9px] font-mono text-slate-500">
-                  <span class="text-slate-400 mr-0.5 scale-90 select-none">宽:</span>
-                  <button
-                    v-for="col in [2, 3, 4, 6, 12]"
-                    :key="`w-${col}`"
-                    class="px-1 py-0.2 rounded transition font-medium"
-                    :class="widget.w === col ? 'bg-primary-600 text-white font-bold' : 'hover:bg-slate-100 text-slate-600'"
-                    :title="`设定占 ${col} 列宽`"
-                    @click.stop="setWidgetSize(widget, col, widget.h)"
-                  >
-                    {{ col === 12 ? '全宽' : `${col}列` }}
-                  </button>
-                </div>
-
-                <span class="w-[1px] h-2.5 bg-slate-200"></span>
-
-                <!-- 高度选择 -->
-                <div class="flex items-center gap-0.5 text-[9px] font-mono text-slate-500">
-                  <span class="text-slate-400 mr-0.5 scale-90 select-none">高:</span>
-                  <button
-                    v-for="row in [1, 2, 3]"
-                    :key="`h-${row}`"
-                    class="px-1 py-0.2 rounded transition font-medium"
-                    :class="widget.h === row ? 'bg-primary-600 text-white font-bold' : 'hover:bg-slate-100 text-slate-600'"
-                    :title="`设定占 ${row} 行高`"
-                    @click.stop="setWidgetSize(widget, widget.w, row)"
-                  >
-                    {{ `${row}行` }}
-                  </button>
-                </div>
-
-                <span class="w-[1px] h-2.5 bg-slate-200"></span>
-
-                <!-- 拖动换高手柄 -->
+                <!-- 拖动手柄 -->
                 <span
-                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 text-xs px-0.5 select-none"
-                  title="按住拖拽自由吸附至网格坐标"
+                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 text-xs select-none"
+                  title="按住拖拽移动网格位置"
                 >
                   ⠿
                 </span>
 
+                <span class="w-[1px] h-2.5 bg-slate-200"></span>
+
+                <!-- 循环切换宽度 -->
+                <button
+                  class="px-1.5 py-0.2 rounded hover:bg-slate-100 text-slate-600 font-mono transition text-[9px] flex items-center gap-0.5"
+                  :title="`当前占 ${widget.w} 列宽，点击切换 (3列 → 4列 → 6列 → 全宽)`"
+                  @click.stop="cycleWidgetWidth(widget)"
+                >
+                  <span>↔</span>
+                  <span class="font-bold text-primary-700">{{ widget.w === 12 ? '全宽' : `${widget.w}列` }}</span>
+                </button>
+
+                <!-- 多行组件：行高切换 -->
+                <template v-if="['photo', 'summary'].includes(widget.type) || widget.h > 1">
+                  <span class="w-[1px] h-2.5 bg-slate-200"></span>
+                  <button
+                    class="px-1.5 py-0.2 rounded hover:bg-slate-100 text-slate-600 font-mono transition text-[9px] flex items-center gap-0.5"
+                    :title="`当前占 ${widget.h} 行高，点击切换 (1行 → 2行 → 3行)`"
+                    @click.stop="cycleWidgetHeight(widget)"
+                  >
+                    <span>↕</span>
+                    <span class="font-bold text-primary-700">{{ `${widget.h}行` }}</span>
+                  </button>
+                </template>
+
+                <span class="w-[1px] h-2.5 bg-slate-200"></span>
+
                 <!-- 下板按钮 -->
                 <button
-                  class="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded px-1 text-xs font-bold leading-none transition"
+                  class="text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold leading-none transition"
                   title="下板移出画板"
                   @click.stop="removeWidget(widget)"
                 >
