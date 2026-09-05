@@ -104,8 +104,28 @@ def extract_json(text: str) -> dict[str, Any]:
 
 
 def get_llm_client() -> LLMClient:
-    """根据配置返回可用的 LLM 客户端"""
+    """根据配置返回可用的 LLM 客户端（优先读取用户在系统设置中配置的自定义模型与 API Key）"""
     if not settings.llm_mock:
+        try:
+            from app.database import SessionLocal
+            from app.services.setting_service import get_raw_llm_config
+
+            with SessionLocal() as db:
+                raw_cfg = get_raw_llm_config(db)
+                api_key = (raw_cfg.get("api_key") or "").strip()
+                base_url = (raw_cfg.get("base_url") or "").strip()
+                model = (raw_cfg.get("model") or "").strip()
+
+                if api_key and base_url and model:
+                    cfg = _ProviderConfig()
+                    cfg.base_url = base_url
+                    cfg.api_key = api_key
+                    cfg.model = model
+                    return RealLLMClient(cfg)
+        except Exception:
+            # 兜底继续检查系统环境变量
+            pass
+
         for name in ("deepseek", "openrouter"):
             cfg = PROVIDERS[name]()
             if cfg.api_key and (settings.llm_provider == "mock" or settings.llm_provider == name):

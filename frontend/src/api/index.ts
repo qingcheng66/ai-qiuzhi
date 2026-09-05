@@ -140,6 +140,14 @@ export const apiKb = {
   import: (content: string) => http.post('/kb/import', { content, user_id: USER_ID }).then((r) => r.data),
 }
 
+export const apiSettings = {
+  getLlm: () => http.get('/settings/llm').then((r) => r.data),
+  saveLlm: (data: { provider: string; api_key: string; base_url?: string; model?: string }) =>
+    http.post('/settings/llm', data).then((r) => r.data),
+  testLlm: (data: { provider: string; api_key: string; base_url?: string; model?: string }) =>
+    http.post('/settings/llm/test', data).then((r) => r.data),
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
