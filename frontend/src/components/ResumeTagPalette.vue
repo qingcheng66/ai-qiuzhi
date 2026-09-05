@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'add-tag', tag: TagItem): void
-  (e: 'remove-tag', tagId: string): void
+  (e: 'remove-tag', tag: TagItem): void
 }>()
 
 // 预设丰富标签池
@@ -117,9 +117,46 @@ function onDragEnd(e: DragEvent) {
   }
 }
 
-// 点击直接添加到画板
-function handleClickTag(tag: TagItem) {
-  emit('add-tag', tag)
+// 点击标签卡片：未上板则上板，已上板则下板
+function toggleTag(tag: TagItem) {
+  if (isTagOnCanvas(tag)) {
+    emit('remove-tag', tag)
+  } else {
+    emit('add-tag', tag)
+  }
+}
+
+// 接收从画布拖回素材池下板
+const isPaletteDraggingOver = ref(false)
+
+function onPaletteDragOver(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move'
+  }
+  isPaletteDraggingOver.value = true
+}
+
+function onPaletteDragLeave(e: DragEvent) {
+  const target = e.currentTarget as HTMLElement
+  if (!target.contains(e.relatedTarget as Node)) {
+    isPaletteDraggingOver.value = false
+  }
+}
+
+function onPaletteDrop(e: DragEvent) {
+  e.preventDefault()
+  isPaletteDraggingOver.value = false
+  const raw = e.dataTransfer?.getData('application/json')
+  if (!raw) return
+  try {
+    const payload = JSON.parse(raw)
+    if (payload.type === 'inner-chip' && payload.id) {
+      emit('remove-tag', { id: payload.id, label: '' } as any)
+    }
+  } catch (err) {
+    console.error('Failed to drop chip back to palette:', err)
+  }
 }
 
 // 新建自定义标签表单
@@ -154,7 +191,6 @@ function createCustomTag() {
     // ignore
   }
 
-  // 重置并自动添加到画布
   newTagForm.value = { icon: '🏷️', label: '', value: '' }
   showCreateModal.value = false
   emit('add-tag', newTag)
@@ -172,12 +208,29 @@ function deleteUserTag(tagId: string, e: MouseEvent) {
 </script>
 
 <template>
-  <div class="resume-tag-palette flex flex-col h-full bg-slate-50 border-r border-slate-200 select-none">
+  <div
+    class="resume-tag-palette relative flex flex-col h-full bg-slate-50 border-r border-slate-200 select-none transition-colors"
+    :class="isPaletteDraggingOver ? 'bg-red-50/80 ring-2 ring-dashed ring-red-400' : ''"
+    @dragover="onPaletteDragOver"
+    @dragleave="onPaletteDragLeave"
+    @drop="onPaletteDrop"
+  >
+    <!-- 拖回下板悬停遮罩提示 -->
+    <div
+      v-if="isPaletteDraggingOver"
+      class="absolute inset-0 bg-red-50/90 backdrop-blur-xs rounded-xl flex items-center justify-center z-30 pointer-events-none border-2 border-dashed border-red-500 animate-pulse"
+    >
+      <div class="px-4 py-2 bg-white rounded-xl shadow-md border border-red-200 text-red-600 font-bold text-xs flex items-center gap-2">
+        <span class="text-base">🗑️</span>
+        <span>松开鼠标，将此标签下板移出简历</span>
+      </div>
+    </div>
+
     <!-- 头部说明与自建标签入口 -->
     <div class="p-3 border-b border-slate-200 bg-white shrink-0">
       <div class="flex items-center justify-between mb-1.5">
         <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-          <span>🏷️</span> 标签与积木素材池
+          <span>🏷️</span> 个人信息标签池
         </span>
         <button
           class="text-[11px] font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 px-2 py-0.5 rounded border border-primary-200 flex items-center gap-1 transition"
@@ -187,7 +240,7 @@ function deleteUserTag(tagId: string, e: MouseEvent) {
         </button>
       </div>
       <p class="text-[11px] text-slate-500 leading-tight">
-        按住标签直接 <span class="text-primary-600 font-semibold">拖入右侧 A4 简历画布</span>，或点击直接上板！
+        点击 <span class="text-primary-600 font-semibold">[上板 +]</span> 或直接按住拖入画布；已上板点击 <span class="text-red-500 font-semibold">[下板 ×]</span> 即可移出！
       </p>
 
       <!-- 分类过滤栏 -->
@@ -219,33 +272,48 @@ function deleteUserTag(tagId: string, e: MouseEvent) {
         draggable="true"
         class="group relative flex items-center justify-between p-2 rounded-lg border text-xs cursor-grab active:cursor-grabbing transition-all transform hover:-translate-y-0.5 hover:shadow-sm"
         :class="isTagOnCanvas(tag)
-          ? 'bg-primary-50/70 border-primary-300 text-primary-900 ring-1 ring-primary-200'
+          ? 'bg-primary-50/80 border-primary-300 text-primary-950 ring-1 ring-primary-300'
           : 'bg-white border-slate-200 text-slate-700 hover:border-primary-400 hover:bg-slate-50/80'"
         @dragstart="onDragStart($event, tag)"
         @dragend="onDragEnd"
-        @click="handleClickTag(tag)"
+        @click="toggleTag(tag)"
       >
         <div class="flex items-center gap-2 min-w-0 flex-1">
           <span class="text-base shrink-0 select-none">{{ tag.icon }}</span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5">
               <span class="font-bold text-slate-800 text-[11px] truncate">{{ tag.label }}</span>
-              <span v-if="isTagOnCanvas(tag)" class="text-[9px] px-1 py-0.2 rounded bg-primary-100 text-primary-700 font-medium">已上板 ✓</span>
+              <span
+                v-if="isTagOnCanvas(tag)"
+                class="text-[9px] px-1 py-0.2 rounded bg-primary-100 text-primary-700 font-medium"
+              >
+                已在板上 ✓
+              </span>
             </div>
             <p class="text-[10px] text-slate-400 truncate mt-0.5">{{ tag.value }}</p>
           </div>
         </div>
 
-        <!-- 拖动手柄提示图标 -->
-        <div class="flex items-center gap-1 shrink-0 ml-1">
-          <span class="text-slate-300 group-hover:text-primary-500 text-xs transition" title="拖入画布或点击加入">⠿</span>
+        <!-- 显式上板 / 下板按钮与拖动手柄 -->
+        <div class="flex items-center gap-1.5 shrink-0 ml-1.5" @click.stop>
+          <button
+            class="text-[11px] px-2 py-0.5 rounded font-semibold transition shadow-2xs"
+            :class="isTagOnCanvas(tag)
+              ? 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300'
+              : 'bg-primary-50 hover:bg-primary-100 text-primary-700 border border-primary-200 hover:border-primary-300'"
+            :title="isTagOnCanvas(tag) ? '点击将此标签下板移出简历' : '点击将此标签上板加入简历'"
+            @click="toggleTag(tag)"
+          >
+            {{ isTagOnCanvas(tag) ? '下板 ×' : '上板 +' }}
+          </button>
+          <span class="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-primary-500 text-xs px-0.5 transition" title="按住拖入画布">⠿</span>
           <button
             v-if="tag.isCustom"
             class="text-slate-300 hover:text-red-500 text-xs px-0.5 transition"
             title="删除此自建标签"
             @click="deleteUserTag(tag.id, $event)"
           >
-            ×
+            🗑️
           </button>
         </div>
       </div>

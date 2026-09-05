@@ -36,6 +36,38 @@ function handleAddTagFromPalette(tag: any) {
   refreshPreview()
 }
 
+function handleRemoveTagFromPalette(tag: any) {
+  if (!resume.value || !resume.value.basics) return
+  const b = resume.value.basics
+  const standardKeys = ['phone', 'email', 'location', 'birthDate', 'github', 'blog']
+
+  if (tag.key && standardKeys.includes(tag.key)) {
+    b[tag.key] = ''
+  } else if (tag.id && tag.id.startsWith('std_')) {
+    const key = tag.id.replace('std_', '')
+    b[key] = ''
+  } else {
+    const cfs = Array.isArray(b.custom_fields) ? b.custom_fields : []
+    if (tag.id && tag.id.startsWith('cf_')) {
+      const idx = parseInt(tag.id.replace('cf_', ''), 10)
+      if (!isNaN(idx) && idx >= 0 && idx < cfs.length) {
+        cfs.splice(idx, 1)
+      } else {
+        b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
+      }
+    } else {
+      b.custom_fields = cfs.filter((cf: any) => cf.label !== tag.label)
+    }
+  }
+
+  if (Array.isArray(b.tag_order) && tag.id) {
+    b.tag_order = b.tag_order.filter((id: string) => id !== tag.id)
+  }
+
+  triggerAutoSave()
+  refreshPreview()
+}
+
 function handleCanvasResumeUpdate(newData: any) {
   resume.value = { ...newData }
   if (newData.section_order) {
@@ -1380,6 +1412,7 @@ async function doFinalize() {
               <ResumeTagPalette
                 :resume-data="resume"
                 @add-tag="handleAddTagFromPalette"
+                @remove-tag="handleRemoveTagFromPalette"
               />
             </div>
 
