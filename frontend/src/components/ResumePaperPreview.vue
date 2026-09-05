@@ -323,6 +323,10 @@ const totalGridRows = computed(() => {
     const bottom = (w.row || 1) + (w.h || 1) - 1
     if (bottom > maxR) maxR = bottom
   }
+  if (resizingWidget.value) {
+    const resizeBottom = resizingWidget.value.startRow + resizingWidget.value.currentH - 1
+    if (resizeBottom > maxR) maxR = resizeBottom
+  }
   if (isDraggingActive.value && hoverCell.value.row) {
     const dragBottom = hoverCell.value.row + (draggingDimensions.value.h || 1) - 1
     if (dragBottom > maxR) maxR = dragBottom
@@ -332,6 +336,15 @@ const totalGridRows = computed(() => {
 })
 
 function isCellHovered(c: number, r: number): boolean {
+  if (resizingWidget.value) {
+    const rw = resizingWidget.value
+    return (
+      c >= rw.startCol &&
+      c < rw.startCol + rw.currentW &&
+      r >= rw.startRow &&
+      r < rw.startRow + rw.currentH
+    )
+  }
   if (!isDraggingActive.value || !isHeaderDraggingOver.value) return false
   const hc = hoverCell.value.col
   const hr = hoverCell.value.row
@@ -503,20 +516,22 @@ function update2DWidgets(newWidgets: Header2DWidget[]) {
   emit('change', 'basics')
 }
 
-// 自由调节宽度和高度
+// 整格整格调节宽度和高度 (dw 格，dh 行)
 function changeWidgetSpan(widget: Header2DWidget, dw: number, dh: number) {
   if (!props.editable) return
   const current = [...active2DWidgets.value]
   const idx = current.findIndex((w) => w.id === widget.id)
   if (idx !== -1) {
     const targetW = Math.min(12, Math.max(1, (current[idx].w || 4) + dw))
-    const targetH = Math.max(1, (current[idx].h || 1) + dh)
+    const targetH = Math.max(1, Math.min(10, (current[idx].h || 1) + dh))
     const targetCol = Math.min(13 - targetW, current[idx].col || 1)
     current[idx] = {
       ...current[idx],
       col: targetCol,
       w: targetW,
       h: targetH,
+      customWidth: undefined,
+      customHeight: undefined,
     }
     update2DWidgets(current)
   }
@@ -540,38 +555,38 @@ function setWidgetSize(widget: Header2DWidget, w: number, h: number) {
   }
 }
 
-// 自由拖拽缩放尺寸交互
+// 自由拖拽缩放整格尺寸交互 (整格整格调节，吸附全量栅格)
 const resizingWidget = ref<{
   id: string
   startX: number
   startY: number
-  startPixelW: number
-  startPixelH: number
-  currentPixelW: number
-  currentPixelH: number
+  startCol: number
+  startRow: number
+  startW: number
+  startH: number
+  currentW: number
+  currentH: number
   handleType: 'right' | 'bottom' | 'corner'
 } | null>(null)
+
+// 坐标网格纸显隐：拖拽组件落位 或 整格缩放尺寸时，点亮全量二维矩阵坐标纸
+const isGridPaperVisible = computed(() => isDraggingActive.value || resizingWidget.value !== null)
 
 function startResize(e: MouseEvent, widget: Header2DWidget, handleType: 'right' | 'bottom' | 'corner') {
   if (!props.editable) return
   e.preventDefault()
   e.stopPropagation()
 
-  const el = (e.currentTarget as HTMLElement).closest('.widget-2d-item') as HTMLElement
-  const rect = el ? el.getBoundingClientRect() : null
-  const scale = currentScale.value || 1
-
-  const initialW = widget.customWidth || (rect ? Math.round(rect.width / scale) : (widget.w || 4) * 58)
-  const initialH = widget.customHeight || (rect ? Math.round(rect.height / scale) : (widget.h || 1) * BASE_ROW_HEIGHT)
-
   resizingWidget.value = {
     id: widget.id,
     startX: e.clientX,
     startY: e.clientY,
-    startPixelW: initialW,
-    startPixelH: initialH,
-    currentPixelW: initialW,
-    currentPixelH: initialH,
+    startCol: widget.col || 1,
+    startRow: widget.row || 1,
+    startW: widget.w || 4,
+    startH: widget.h || 1,
+    currentW: widget.w || 4,
+    currentH: widget.h || 1,
     handleType,
   }
 
@@ -581,24 +596,29 @@ function startResize(e: MouseEvent, widget: Header2DWidget, handleType: 'right' 
 
 function onResizeMouseMove(e: MouseEvent) {
   if (!resizingWidget.value) return
+  const state = resizingWidget.value
   const scale = currentScale.value || 1
-  const deltaX = (e.clientX - resizingWidget.value.startX) / scale
-  const deltaY = (e.clientY - resizingWidget.value.startY) / scale
+  const deltaX = (e.clientX - state.startX) / scale
+  const deltaY = (e.clientY - state.startY) / scale
 
   const container = headerContainerRef.value
   const rect = container?.getBoundingClientRect()
   const availableWidth = rect ? Math.max(200, (rect.width / scale) - 24) : 698
+  const singleColWidth = (availableWidth - (TOTAL_COLS - 1) * 8) / TOTAL_COLS
+  const colStep = singleColWidth + 8
+  const rowStep = BASE_ROW_HEIGHT + 8
 
-  if (resizingWidget.value.handleType === 'right' || resizingWidget.value.handleType === 'corner') {
-    resizingWidget.value.currentPixelW = Math.round(
-      Math.max(60, Math.min(availableWidth, resizingWidget.value.startPixelW + deltaX))
-    )
+  // 整格整格计算宽度变化 (Snap column-by-column)
+  if (state.handleType === 'right' || state.handleType === 'corner') {
+    const colDelta = Math.round(deltaX / colStep)
+    const maxAllowedW = TOTAL_COLS - state.startCol + 1
+    state.currentW = Math.max(1, Math.min(maxAllowedW, state.startW + colDelta))
   }
 
-  if (resizingWidget.value.handleType === 'bottom' || resizingWidget.value.handleType === 'corner') {
-    resizingWidget.value.currentPixelH = Math.round(
-      Math.max(36, Math.min(500, resizingWidget.value.startPixelH + deltaY))
-    )
+  // 整格整格计算高度变化 (Snap row-by-row)
+  if (state.handleType === 'bottom' || state.handleType === 'corner') {
+    const rowDelta = Math.round(deltaY / rowStep)
+    state.currentH = Math.max(1, Math.min(10, state.startH + rowDelta))
   }
 }
 
@@ -612,29 +632,12 @@ function onResizeMouseUp() {
   const idx = current.findIndex((w) => w.id === state.id)
 
   if (idx !== -1) {
-    const widget = current[idx]
-    const scale = currentScale.value || 1
-    const container = headerContainerRef.value
-    const rect = container?.getBoundingClientRect()
-    const availableWidth = rect ? Math.max(200, (rect.width / scale) - 24) : 698
-    const singleColWidth = (availableWidth - (TOTAL_COLS - 1) * 8) / TOTAL_COLS
-
-    // 计算最贴合的网格跨度 (column span 和 row span)，确保与周围网格自然接壤
-    const newColSpan = Math.min(
-      TOTAL_COLS - (widget.col || 1) + 1,
-      Math.max(1, Math.round((state.currentPixelW + 4) / (singleColWidth + 8)))
-    )
-    const newRowSpan = Math.max(
-      1,
-      Math.round((state.currentPixelH + 4) / (BASE_ROW_HEIGHT + 8))
-    )
-
     current[idx] = {
-      ...widget,
-      w: newColSpan,
-      h: newRowSpan,
-      customWidth: state.currentPixelW,
-      customHeight: state.currentPixelH,
+      ...current[idx],
+      w: state.currentW,
+      h: state.currentH,
+      customWidth: undefined,
+      customHeight: undefined,
     }
     update2DWidgets(current)
   }
@@ -935,19 +938,19 @@ defineExpose({
           ref="headerContainerRef"
           class="header-section relative pb-4 mb-4 border-b border-slate-200 transition-all rounded-xl p-3 select-text"
           :style="{
-            minHeight: isDraggingActive ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) + 24}px` : '150px',
+            minHeight: isGridPaperVisible ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) + 24}px` : '150px',
           }"
           :class="{
-            'ring-2 ring-primary-500 ring-dashed bg-primary-50/20 shadow-sm': isDraggingActive,
-            'hover:bg-slate-50/30': !isDraggingActive,
+            'ring-2 ring-primary-500 ring-dashed bg-primary-50/20 shadow-sm': isGridPaperVisible,
+            'hover:bg-slate-50/30': !isGridPaperVisible,
           }"
           @dragover="onHeaderDragOver"
           @dragleave="onHeaderDragLeave"
           @drop="onHeaderDrop"
         >
-          <!-- 只有在拖拽时才点亮的无限二维方格纸阵列 (平时 100% 彻底隐形，拖动时显示全量矩阵方格) -->
+          <!-- 只有在拖拽组件或整格拉伸尺寸时才点亮的无限二维方格纸阵列 -->
           <div
-            v-if="isDraggingActive"
+            v-if="isGridPaperVisible"
             class="pointer-events-none absolute inset-x-3 top-3 z-10 grid grid-cols-12 gap-2 transition-all duration-200"
             :style="{
               gridAutoRows: `${BASE_ROW_HEIGHT}px`,
@@ -981,12 +984,12 @@ defineExpose({
             <span>吸附落位至 [第 {{ hoverCell.col }} 列, 第 {{ hoverCell.row }} 行]</span>
           </div>
 
-          <!-- 二维坐标网格核心组件排版 (真实自由坐标渲染) -->
+          <!-- 二维坐标网格核心组件排版 (整格自由排布) -->
           <div
             class="relative z-20 grid grid-cols-12 gap-2 items-stretch"
             :style="{
               gridAutoRows: `${BASE_ROW_HEIGHT}px`,
-              minHeight: isDraggingActive ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) - 8}px` : undefined,
+              minHeight: isGridPaperVisible ? `${totalGridRows * (BASE_ROW_HEIGHT + 8) - 8}px` : undefined,
             }"
           >
             <div
@@ -994,72 +997,69 @@ defineExpose({
               :key="widget.id"
               class="widget-2d-item group/widget relative rounded-lg transition-all flex flex-col justify-center"
               :style="{
-                gridColumn: `${widget.col} / span ${widget.w}`,
-                gridRow: `${widget.row} / span ${widget.h}`,
-                width: resizingWidget?.id === widget.id 
-                  ? `${resizingWidget.currentPixelW}px` 
-                  : (widget.customWidth ? `${widget.customWidth}px` : undefined),
-                height: resizingWidget?.id === widget.id 
-                  ? `${resizingWidget.currentPixelH}px` 
-                  : (widget.customHeight ? `${widget.customHeight}px` : undefined),
+                gridColumn: `${widget.col} / span ${resizingWidget?.id === widget.id ? resizingWidget.currentW : (widget.w || 4)}`,
+                gridRow: `${widget.row} / span ${resizingWidget?.id === widget.id ? resizingWidget.currentH : (widget.h || 1)}`,
               }"
               :class="[
                 draggingWidgetId === widget.id ? 'opacity-40 ring-2 ring-primary-400' : '',
-                resizingWidget?.id === widget.id ? 'ring-2 ring-primary-500 shadow-md z-40 bg-white/95' : '',
+                resizingWidget?.id === widget.id ? 'ring-2 ring-primary-500 bg-primary-50/40 shadow-md z-40' : '',
                 editable ? 'hover:ring-1 hover:ring-primary-300/80 hover:bg-slate-50/70 p-1.5' : 'p-0.5'
               ]"
               :draggable="editable && !resizingWidget"
               @dragstart="onWidgetDragStart($event, widget)"
             >
-              <!-- 自由缩放手柄（鼠标悬停组件边缘时显现） -->
+              <!-- 整格缩放手柄（鼠标悬停组件边缘时显现） -->
               <template v-if="editable">
-                <!-- 右侧边缘：自由拉伸宽度 -->
+                <!-- 右侧边缘：整格拉伸宽度 (1格、2格、3格...) -->
                 <div
                   class="resize-handle-right absolute -right-1.5 top-2 bottom-2 w-3 cursor-col-resize flex items-center justify-center opacity-0 group-hover/widget:opacity-100 transition z-30 select-none"
-                  title="按住向右拖拽自由调节宽度"
+                  title="按住向右拖拽整格扩展/缩减宽度"
                   @mousedown="startResize($event, widget, 'right')"
                 >
-                  <div class="w-1 h-3/4 bg-primary-400/70 hover:bg-primary-600 rounded-full transition"></div>
+                  <div class="w-1.5 h-3/4 bg-primary-400/80 hover:bg-primary-600 rounded-full transition shadow-2xs"></div>
                 </div>
 
-                <!-- 底部边缘：自由拉伸高度 -->
+                <!-- 底部边缘：整格拉伸高度 (1行、2行、3行...) -->
                 <div
                   class="resize-handle-bottom absolute left-2 right-2 -bottom-1.5 h-3 cursor-row-resize flex items-center justify-center opacity-0 group-hover/widget:opacity-100 transition z-30 select-none"
-                  title="按住向下拖拽自由调节高度"
+                  title="按住向下拖拽整格扩展/缩减高度"
                   @mousedown="startResize($event, widget, 'bottom')"
                 >
-                  <div class="h-1 w-3/4 bg-primary-400/70 hover:bg-primary-600 rounded-full transition"></div>
+                  <div class="h-1.5 w-3/4 bg-primary-400/80 hover:bg-primary-600 rounded-full transition shadow-2xs"></div>
                 </div>
 
-                <!-- 右下角手柄：自由等比/宽高缩放 -->
+                <!-- 右下角手柄：整格双向拉伸 (宽高格数同时变动) -->
                 <div
-                  class="resize-handle-corner absolute -right-1.5 -bottom-1.5 w-4 h-4 cursor-nwse-resize text-primary-500 hover:text-primary-700 bg-white hover:bg-primary-50 border border-primary-300 rounded shadow-2xs flex items-center justify-center opacity-0 group-hover/widget:opacity-100 transition z-30 select-none text-[11px] font-bold"
-                  title="按住拖拽自由调节宽高尺寸"
+                  class="resize-handle-corner absolute -right-1.5 -bottom-1.5 w-4 h-4 cursor-nwse-resize text-primary-500 hover:text-primary-700 bg-white hover:bg-primary-50 border border-primary-300 rounded shadow-xs flex items-center justify-center opacity-0 group-hover/widget:opacity-100 transition z-30 select-none text-[11px] font-bold"
+                  title="按住拖拽整格拉伸宽度与高度"
                   @mousedown="startResize($event, widget, 'corner')"
                 >
                   ⌟
                 </div>
 
-                <!-- 拖拽缩放实时尺寸浮动指示器 -->
+                <!-- 整格拉伸尺寸实时浮动指示器 -->
                 <div
                   v-if="resizingWidget?.id === widget.id"
-                  class="absolute -bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 text-white text-[10px] font-mono px-2.5 py-0.5 rounded-md shadow-lg pointer-events-none whitespace-nowrap flex items-center gap-1.5"
+                  class="absolute -bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white text-[11px] font-mono px-3 py-1 rounded-full shadow-xl pointer-events-none whitespace-nowrap flex items-center gap-2 border border-primary-400 select-none"
                 >
-                  <span>↔ {{ resizingWidget.currentPixelW }}px</span>
+                  <span class="text-primary-300 font-bold flex items-center gap-1">
+                    <span>↔</span> {{ resizingWidget.currentW }} 格宽
+                  </span>
                   <span class="text-slate-500">|</span>
-                  <span>↕ {{ resizingWidget.currentPixelH }}px</span>
-                  <span class="text-primary-300 font-sans">({{ widget.w }}列 × {{ widget.h }}行)</span>
+                  <span class="text-primary-300 font-bold flex items-center gap-1">
+                    <span>↕</span> {{ resizingWidget.currentH }} 行高
+                  </span>
                 </div>
               </template>
 
-              <!-- 极简微型控制胶囊: 拖动手柄 ⠿ + 宽度循环 + 高度循环(多行组件) + 下板 × -->
+              <!-- 极简微型控制胶囊: 拖动手柄 ⠿ + 整格宽度微调 [-] N格 [+] + 高度微调 [-] N行 [+] + 下板 × -->
               <div
                 v-if="editable"
-                class="widget-ctrl-bar absolute -top-3.5 right-1 flex items-center gap-1.5 bg-white/95 backdrop-blur-xs shadow-sm border border-slate-200/90 rounded-full px-2 py-0.5 z-30 opacity-0 group-hover/widget:opacity-100 transition-all text-[10px] select-none"
+                class="widget-ctrl-bar absolute -top-3.5 right-1 flex items-center gap-1 bg-white/95 backdrop-blur-xs shadow-sm border border-slate-200/90 rounded-full px-1.5 py-0.5 z-30 opacity-0 group-hover/widget:opacity-100 transition-all text-[10px] select-none"
               >
                 <!-- 拖动手柄 -->
                 <span
-                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 text-xs select-none"
+                  class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-700 text-xs select-none px-0.5"
                   title="按住拖拽移动网格位置"
                 >
                   ⠿
@@ -1067,31 +1067,48 @@ defineExpose({
 
                 <span class="w-[1px] h-2.5 bg-slate-200"></span>
 
-                <!-- 循环切换宽度 / 自定义宽度还原 -->
-                <button
-                  class="px-1.5 py-0.2 rounded hover:bg-slate-100 text-slate-600 font-mono transition text-[9px] flex items-center gap-0.5"
-                  :title="widget.customWidth ? `当前自由宽度 ${widget.customWidth}px (占${widget.w}列)，点击重置标准列宽` : `当前占 ${widget.w} 列宽，点击切换`"
-                  @click.stop="cycleWidgetWidth(widget)"
-                >
-                  <span>↔</span>
-                  <span class="font-bold text-primary-700">
-                    {{ widget.customWidth ? `${widget.customWidth}px` : (widget.w === 12 ? '全宽' : `${widget.w}列`) }}
-                  </span>
-                </button>
-
-                <!-- 多行组件或自定义高度：行高切换 / 还原 -->
-                <template v-if="['photo', 'summary'].includes(widget.type) || widget.h > 1 || widget.customHeight">
-                  <span class="w-[1px] h-2.5 bg-slate-200"></span>
+                <!-- 整格宽度微调: [-] N格 [+] -->
+                <div class="flex items-center gap-0.5 bg-slate-50 rounded px-1 py-0.2 font-mono text-[9px] border border-slate-200/60" title="整格增减宽度 (1~12格)">
                   <button
-                    class="px-1.5 py-0.2 rounded hover:bg-slate-100 text-slate-600 font-mono transition text-[9px] flex items-center gap-0.5"
-                    :title="widget.customHeight ? `当前自由高度 ${widget.customHeight}px (占${widget.h}行)，点击重置标准行高` : `当前占 ${widget.h} 行高，点击切换`"
-                    @click.stop="cycleWidgetHeight(widget)"
+                    class="w-3.5 h-3.5 flex items-center justify-center rounded hover:bg-white text-slate-500 hover:text-primary-700 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    :disabled="widget.w <= 1"
+                    title="减少 1 格宽度"
+                    @click.stop="changeWidgetSpan(widget, -1, 0)"
                   >
-                    <span>↕</span>
-                    <span class="font-bold text-primary-700">
-                      {{ widget.customHeight ? `${widget.customHeight}px` : `${widget.h}行` }}
-                    </span>
+                    -
                   </button>
+                  <span class="font-bold text-primary-700 px-0.5 whitespace-nowrap">{{ widget.w }}格</span>
+                  <button
+                    class="w-3.5 h-3.5 flex items-center justify-center rounded hover:bg-white text-slate-500 hover:text-primary-700 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    :disabled="widget.w >= 12"
+                    title="增加 1 格宽度"
+                    @click.stop="changeWidgetSpan(widget, 1, 0)"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <!-- 整格高度微调: [-] N行 [+] (适用于照片、自我总结或多行组件) -->
+                <template v-if="['photo', 'summary'].includes(widget.type) || widget.h > 1">
+                  <span class="w-[1px] h-2.5 bg-slate-200"></span>
+                  <div class="flex items-center gap-0.5 bg-slate-50 rounded px-1 py-0.2 font-mono text-[9px] border border-slate-200/60" title="整格增减高度 (1~10行)">
+                    <button
+                      class="w-3.5 h-3.5 flex items-center justify-center rounded hover:bg-white text-slate-500 hover:text-primary-700 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      :disabled="widget.h <= 1"
+                      title="减少 1 行高度"
+                      @click.stop="changeWidgetSpan(widget, 0, -1)"
+                    >
+                      -
+                    </button>
+                    <span class="font-bold text-primary-700 px-0.5 whitespace-nowrap">{{ widget.h }}行</span>
+                    <button
+                      class="w-3.5 h-3.5 flex items-center justify-center rounded hover:bg-white text-slate-500 hover:text-primary-700 font-bold transition disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="增加 1 行高度"
+                      @click.stop="changeWidgetSpan(widget, 0, 1)"
+                    >
+                      +
+                    </button>
+                  </div>
                 </template>
 
                 <span class="w-[1px] h-2.5 bg-slate-200"></span>
