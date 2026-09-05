@@ -122,8 +122,12 @@ const matches = ref<any[]>([])
 const usedSource = ref('')
 const showJdDrawer = ref(false)
 
-// 一键创建通用母简历（不强制要求先输 JD）
-async function startBlankResume() {
+// 创建新简历 (mode: 'blank' 纯白板 | 'kb' 知识库预填)
+const showNewMenu = ref(false)
+
+async function createResumeDraft(mode: 'blank' | 'kb' = 'blank') {
+  showNewMenu.value = false
+  showHistory.value = false
   error.value = ''
   loading.value = true
   try {
@@ -131,17 +135,77 @@ async function startBlankResume() {
     templates.value = tpls
     const defTpl = tpls[0]?.id || 1
     templateId.value = defTpl
-    const draft = await apiResume.createDraft({ template_id: defTpl, title: '通用母简历草稿' })
+
+    let initialContent: any = null
+    let draftTitle = '通用母简历草稿'
+
+    if (mode === 'blank') {
+      draftTitle = '全新空白简历'
+      initialContent = {
+        is_blank: true,
+        basics: {
+          name: '求职者姓名',
+          label: '意向岗位',
+          email: '',
+          phone: '',
+          location: '',
+          custom_fields: [],
+        },
+        education: [],
+        skills: [],
+        projects: [],
+        experience: [],
+        highlights: [],
+        custom_sections: [],
+      }
+    }
+
+    const draft = await apiResume.createDraft({
+      template_id: defTpl,
+      title: draftTitle,
+      initial_content: initialContent,
+    })
     resumeId.value = draft.id
     resume.value = draft.content || {}
+    resumeTitle.value = draft.title || draftTitle
     step.value = 3
     updateUrlParams(draft.id, null, 3)
     await refreshPreview()
+    successMsg.value = mode === 'blank' ? '✓ 已创建全新空白简历（白板）！' : '✓ 已基于知识库创建简历草稿！'
+    setTimeout(() => { successMsg.value = '' }, 2500)
   } catch (err: any) {
-    error.value = '创建空白简历失败：' + err.message
+    error.value = '创建简历失败：' + err.message
   } finally {
     loading.value = false
   }
+}
+
+// 保持兼容旧调用
+const startBlankResume = (mode: 'blank' | 'kb' = 'blank') => createResumeDraft(mode)
+
+// 清空当前简历为全新空白白板
+function resetCurrentToBlank() {
+  if (!confirm('确定要清空当前简历的所有模块内容，重置为一张空白白板吗？（操作后将重新开始）')) return
+  if (!resume.value) return
+  resume.value = {
+    basics: {
+      name: '求职者姓名',
+      label: '意向岗位',
+      email: '',
+      phone: '',
+      location: '',
+      custom_fields: [],
+    },
+    education: [],
+    skills: [],
+    projects: [],
+    experience: [],
+    highlights: [],
+    custom_sections: [],
+  }
+  handleManualSave()
+  successMsg.value = '✓ 当前简历已清空重置为全新白板！'
+  setTimeout(() => { successMsg.value = '' }, 2500)
 }
 
 // 卸载/解绑已挂载的 JD
@@ -304,6 +368,7 @@ function resetPanelWidths() {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleWindowResize)
+  window.removeEventListener('keydown', handleGlobalKeyDown)
   window.removeEventListener('mousemove', onDragging)
   window.removeEventListener('mouseup', stopDrag)
 })
@@ -544,6 +609,73 @@ function triggerAutoSave() {
   }, 1000)
 }
 
+const isFinalizing = ref(false)
+
+// 手动保存草稿（支持保存按钮与 Cmd+S / Ctrl+S 快捷键）
+async function handleManualSave() {
+  if (!resumeId.value || !resume.value) return
+  isSaving.value = true
+  saveStatusText.value = '正在手动保存…'
+  clearTimeout(autoSaveTimer)
+  try {
+    await apiResume.update(resumeId.value, {
+      content: resume.value,
+      template_id: templateId.value,
+      title: resumeTitle.value.trim() || undefined,
+    })
+    isSaving.value = false
+    saveStatusText.value = '所有更改已手动保存 ✓'
+    successMsg.value = '✓ 简历草稿已成功保存！'
+    setTimeout(() => {
+      if (successMsg.value.includes('已成功保存')) successMsg.value = ''
+    }, 2500)
+    await refreshPreview()
+  } catch (err: any) {
+    isSaving.value = false
+    saveStatusText.value = '保存失败'
+    error.value = '保存失败：' + err.message
+  }
+}
+
+// 全局快捷键监听 (Cmd+S / Ctrl+S)
+function handleGlobalKeyDown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    handleManualSave()
+  }
+}
+
+// 一键完成并前往求职工作台进行后续操作
+async function handleFinalizeAndGoWorkspace() {
+  if (!resumeId.value) return
+  isFinalizing.value = true
+  error.value = ''
+  try {
+    // 1. 立即同步当前最新内容与标题
+    if (resume.value) {
+      await apiResume.update(resumeId.value, {
+        content: resume.value,
+        template_id: templateId.value,
+        title: resumeTitle.value.trim() || undefined,
+      })
+    }
+    // 2. 调用 finalize 建立快照与求职工作台任务自动绑定
+    await apiResume.finalize(resumeId.value, '定稿')
+    // 3. 页面直接跳转到求职工作台，后续操作（投递流转、AI 押题、PDF 下载）统一在工作台开展
+    await router.push({
+      path: '/workspace',
+      query: {
+        focus_resume_id: String(resumeId.value),
+        from_finalized: '1',
+      },
+    })
+  } catch (err: any) {
+    error.value = '定稿并前往求职工作台失败：' + err.message
+  } finally {
+    isFinalizing.value = false
+  }
+}
+
 function handleSectionChange(secName: string, secData: any) {
   if (resume.value) {
     resume.value[secName] = secData
@@ -661,6 +793,7 @@ async function loadResumeById(rid: number, posId: number | null = null, targetSt
 
 onMounted(async () => {
   window.addEventListener('resize', handleWindowResize)
+  window.addEventListener('keydown', handleGlobalKeyDown)
   handleWindowResize()
 
   const resumeIdParam = route.query.resume_id as string
@@ -909,6 +1042,22 @@ async function doFinalize() {
           <button class="text-slate-400 hover:text-slate-700 text-lg px-2" @click="showHistory = false">✕</button>
         </div>
 
+        <!-- 历史抽屉内快捷新建操作条 -->
+        <div class="p-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+          <button
+            class="flex-1 py-1.5 px-2 bg-white hover:bg-primary-50 border border-slate-200 hover:border-primary-300 rounded-lg text-xs text-slate-700 hover:text-primary-700 font-medium flex items-center justify-center gap-1 transition shadow-2xs"
+            @click="createResumeDraft('blank')"
+          >
+            <span>📄 新建空白白板</span>
+          </button>
+          <button
+            class="flex-1 py-1.5 px-2 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-lg text-xs text-slate-700 hover:text-indigo-700 font-medium flex items-center justify-center gap-1 transition shadow-2xs"
+            @click="createResumeDraft('kb')"
+          >
+            <span>👤 从知识库预填</span>
+          </button>
+        </div>
+
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
           <div v-if="loadingHistory" class="text-center py-8 text-slate-400 text-sm">加载中…</div>
           <div v-else-if="!historyList.length" class="text-center py-8 text-slate-400 text-sm">
@@ -1009,13 +1158,26 @@ async function doFinalize() {
             🎨 更换模板
           </button>
 
+          <!-- 显式【💾 保存草稿】按钮 (支持快捷键 Cmd+S) -->
+          <button
+            class="btn-secondary !text-xs !py-1 flex items-center gap-1 font-medium text-slate-700 hover:text-primary-700 hover:border-primary-300 transition"
+            :disabled="isSaving"
+            title="快捷键 Cmd+S / Ctrl+S 立即保存当前草稿"
+            @click="handleManualSave"
+          >
+            <span v-if="isSaving" class="animate-spin text-primary-500">⏳</span>
+            <span v-else>💾</span>
+            <span>保存草稿</span>
+            <kbd class="hidden sm:inline-block ml-0.5 px-1 py-0.2 text-[9px] bg-slate-100 text-slate-500 rounded border border-slate-200 font-mono">⌘S</kbd>
+          </button>
+
           <!-- 导出 PDF -->
           <button
-            class="btn-primary !text-xs !py-1 flex items-center gap-1"
+            class="btn-secondary !text-xs !py-1 flex items-center gap-1"
             title="导出为 A4 PDF 或打印"
             @click="doExport('pdf')"
           >
-            <span>💾 导出 PDF</span>
+            <span>📥 PDF</span>
           </button>
 
           <span class="w-px h-3.5 bg-slate-200 hidden sm:inline"></span>
@@ -1025,9 +1187,71 @@ async function doFinalize() {
             <span>📁 草稿箱</span>
           </button>
 
-          <!-- ＋ 新建简历 -->
-          <button class="btn-secondary !text-xs !py-1 text-primary-600 border-primary-200 hover:bg-primary-50" @click="startBlankResume" title="创建一份全新简历草稿">
-            ＋ 新建
+          <!-- ＋ 新建简历 / 白板 下拉菜单 -->
+          <div class="relative">
+            <button
+              class="btn-secondary !text-xs !py-1 text-primary-600 border-primary-200 hover:bg-primary-50 flex items-center gap-1 font-medium"
+              title="新建简历草稿或更换全新空白简历"
+              @click="showNewMenu = !showNewMenu"
+            >
+              <span>＋ 新建</span>
+              <span class="text-[9px]">▾</span>
+            </button>
+
+            <!-- 点击外部关闭透明遮罩 -->
+            <div v-if="showNewMenu" class="fixed inset-0 z-40" @click="showNewMenu = false"></div>
+
+            <div
+              v-if="showNewMenu"
+              class="absolute right-0 top-full mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 text-xs animation-fade-in"
+              @click="showNewMenu = false"
+            >
+              <button
+                class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-start gap-2.5 text-slate-700 transition"
+                @click="createResumeDraft('blank')"
+              >
+                <span class="text-base mt-0.5">📄</span>
+                <div>
+                  <div class="font-bold text-slate-800">新建空白简历 (全新白板)</div>
+                  <div class="text-[10px] text-slate-400 leading-tight">不预填数据，干干净净从零编写</div>
+                </div>
+              </button>
+              <button
+                class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-start gap-2.5 text-slate-700 transition"
+                @click="createResumeDraft('kb')"
+              >
+                <span class="text-base mt-0.5">👤</span>
+                <div>
+                  <div class="font-bold text-slate-800">从知识库预填新建</div>
+                  <div class="text-[10px] text-slate-400 leading-tight">自动带入个人资产库技能与经历</div>
+                </div>
+              </button>
+              <div class="border-t border-slate-100 my-1"></div>
+              <button
+                class="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 flex items-start gap-2.5 transition"
+                @click="resetCurrentToBlank"
+              >
+                <span class="text-base mt-0.5">🧹</span>
+                <div>
+                  <div class="font-bold text-red-700">清空当前简历为白板</div>
+                  <div class="text-[10px] text-red-400 leading-tight">抹平当前所有模块重新开始</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <span class="w-px h-3.5 bg-slate-200 hidden sm:inline"></span>
+
+          <!-- 🚀【完成并前往求职工作台】核心主按钮 -->
+          <button
+            class="!text-xs !py-1.5 px-3.5 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 transition-all active:scale-98"
+            :disabled="isFinalizing"
+            title="保存定稿并直接进入求职工作台，在工作台统一跟踪投递链路、AI 押题演练与 PDF 归档"
+            @click="handleFinalizeAndGoWorkspace"
+          >
+            <span v-if="isFinalizing" class="animate-spin">⏳</span>
+            <span v-else>🚀</span>
+            <span>{{ isFinalizing ? '定稿中…' : '完成并前往求职工作台' }}</span>
           </button>
         </div>
       </div>

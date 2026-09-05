@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { apiResume, apiWorkspace } from '@/api'
+import { useRoute, useRouter } from 'vue-router'
+import { apiResume, apiWorkspace, downloadBlob } from '@/api'
 
+const route = useRoute()
 const router = useRouter()
 const activeWorkspaceView = ref<'resumes' | 'companies'>('resumes')
 const resumes = ref<any[]>([])
 const selectedResume = ref<any>(null)
 const mockInterviewData = ref<any>(null)
 const isGeneratingMock = ref(false)
+const isExportingPdf = ref(false)
+const showFinalizedBanner = ref(false)
 
 const companies = ref<any[]>([])
 const stats = ref<any>(null)
@@ -29,13 +32,34 @@ async function load() {
     companies.value = cs
     stats.value = st
     resumes.value = rList
-    if (rList.length && !selectedResume.value) {
+
+    const focusId = route.query.focus_resume_id ? Number(route.query.focus_resume_id) : null
+    if (focusId && rList.length) {
+      const found = rList.find((r: any) => r.id === focusId)
+      selectedResume.value = found || rList[0]
+    } else if (rList.length && !selectedResume.value) {
       selectedResume.value = rList[0]
+    }
+
+    if (route.query.from_finalized === '1') {
+      showFinalizedBanner.value = true
     }
   } catch (e: any) {
     error.value = e.message
   } finally {
     loading.value = false
+  }
+}
+
+async function downloadResumePdf(rId: number, title?: string) {
+  isExportingPdf.value = true
+  try {
+    const blob = await apiResume.export(rId, 'pdf')
+    downloadBlob(blob, `${title || '简历'}-${rId}.pdf`)
+  } catch (e: any) {
+    error.value = '下载定稿 PDF 失败：' + e.message
+  } finally {
+    isExportingPdf.value = false
   }
 }
 
@@ -132,6 +156,26 @@ function selectResume(r: any) {
 
     <div v-if="error" class="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{{ error }}</div>
 
+    <!-- 简历定稿完成直达工作台 引导通知横幅 -->
+    <div
+      v-if="showFinalizedBanner"
+      class="mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200 text-slate-800 shadow-xs flex items-start justify-between animation-fade-in"
+    >
+      <div class="flex items-start gap-3">
+        <span class="text-2xl mt-0.5">🎉</span>
+        <div>
+          <div class="flex items-center gap-2">
+            <h4 class="font-bold text-emerald-900 text-sm">简历已成功保存定稿！已直达求职作战台</h4>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-medium">专属作战室就绪</span>
+          </div>
+          <p class="text-xs text-slate-600 mt-1 leading-relaxed">
+            当前已为您无缝载入定稿简历：<strong>「{{ selectedResume?.title || '专属定制简历' }}」</strong>。所有后续操作（10 阶段投递跟踪流转、下载定稿高清 PDF、或针对岗位发起专属 AI 押题复习）均可在本作战室集中处理。
+          </p>
+        </div>
+      </div>
+      <button class="text-slate-400 hover:text-slate-600 text-base px-2 py-0.5 cursor-pointer" @click="showFinalizedBanner = false">✕</button>
+    </div>
+
     <!-- ================= 视图 A: 简历专属作战室 (Resume-Centric War Room) ================= -->
     <div v-if="activeWorkspaceView === 'resumes'" class="space-y-4">
       <div v-if="!resumes.length" class="text-center py-16 bg-white rounded-2xl border border-slate-200">
@@ -189,6 +233,17 @@ function selectResume(r: any) {
                 </p>
               </div>
               <div class="flex items-center gap-2">
+                <!-- 下载定稿 PDF -->
+                <button
+                  class="btn-secondary !text-xs !py-1.5 flex items-center gap-1"
+                  :disabled="isExportingPdf"
+                  title="下载该定稿版本的排版高清 PDF 文件"
+                  @click="downloadResumePdf(selectedResume.id, selectedResume.title)"
+                >
+                  <span v-if="isExportingPdf" class="animate-spin text-primary-500">⏳</span>
+                  <span v-else>📥</span>
+                  <span>{{ isExportingPdf ? '导出中…' : '下载定稿 PDF' }}</span>
+                </button>
                 <button
                   class="btn-secondary !text-xs !py-1.5"
                   @click="router.push(`/generate?resume_id=${selectedResume.id}&step=3`)"

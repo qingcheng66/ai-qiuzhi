@@ -253,14 +253,36 @@ def finalize_resume(resume_id: int, req: FinalizeRequest = FinalizeRequest(), us
     r.status = "final"
     r.updated_at = datetime.utcnow()
 
+    # 如果尚未关联岗位，但绑定了目标 JD，自动在求职工作台中建立企业、岗位与投递记录
+    if not r.position_id and isinstance(r.content, dict) and r.content.get("target_jd", {}).get("structured"):
+        st = r.content["target_jd"]["structured"]
+        comp_name = st.get("company") or "目标企业"
+        pos_title = st.get("title") or r.title or "目标岗位"
+        from app.models.company import Company, Position, Application
+        comp = db.query(Company).filter(Company.name == comp_name, Company.user_id == user_id).first()
+        if not comp:
+            comp = Company(user_id=user_id, name=comp_name, industry=st.get("industry") or "科技/互联网")
+            db.add(comp)
+            db.flush()
+        pos = db.query(Position).filter(Position.company_id == comp.id, Position.title == pos_title).first()
+        if not pos:
+            pos = Position(
+                company_id=comp.id,
+                title=pos_title,
+                jd_raw=r.content["target_jd"].get("raw") or "",
+                jd_structured=st,
+            )
+            db.add(pos)
+            db.flush()
+        r.position_id = pos.id
+        app = db.query(Application).filter(Application.position_id == pos.id, Application.user_id == user_id).first()
+        if not app:
+            app = Application(user_id=user_id, position_id=pos.id, stage="投递", status="active")
+            db.add(app)
+            db.flush()
+
     # 如果有关联岗位，找出投递记录并生成版本快照
     if r.position_id:
-        app = (
-            db.query(ResumeVersion)
-            .filter(ResumeVersion.resume_data_id == resume_id)
-            .order_by(ResumeVersion.version.desc())
-            .first()
-        )
         from app.models.company import Application
         applications = (
             db.query(Application)
