@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services import setting_service
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 class LLMConfigPayload(BaseModel):
