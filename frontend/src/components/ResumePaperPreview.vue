@@ -416,70 +416,6 @@ function finishEditField(fieldName: 'name' | 'label' | 'summary') {
   emit('change', 'basics')
 }
 
-// =================== 大模块拖拽排序交互 ===================
-const draggingSectionId = ref<string | null>(null)
-const dropTargetSectionId = ref<string | null>(null)
-const dropPosition = ref<'before' | 'after'>('before')
-
-function onSectionDragStart(e: DragEvent, secId: string) {
-  if (!props.editable) return
-  draggingSectionId.value = secId
-  if (e.dataTransfer) {
-    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'section', sectionId: secId }))
-    e.dataTransfer.effectAllowed = 'move'
-  }
-}
-
-function onSectionDragOver(e: DragEvent, targetSecId: string) {
-  if (!props.editable || !draggingSectionId.value || draggingSectionId.value === targetSecId) return
-  e.preventDefault()
-  dropTargetSectionId.value = targetSecId
-
-  const targetEl = e.currentTarget as HTMLElement
-  const rect = targetEl.getBoundingClientRect()
-  const offset = e.clientY - rect.top
-  dropPosition.value = offset < rect.height / 2 ? 'before' : 'after'
-}
-
-function onSectionDragLeave(e: DragEvent) {
-  const target = e.currentTarget as HTMLElement
-  if (!target.contains(e.relatedTarget as Node)) {
-    dropTargetSectionId.value = null
-  }
-}
-
-function onSectionDrop(e: DragEvent, targetSecId: string) {
-  if (!props.editable || !draggingSectionId.value) return
-  e.preventDefault()
-
-  const srcId = draggingSectionId.value
-  const targetId = targetSecId
-  const pos = dropPosition.value
-
-  draggingSectionId.value = null
-  dropTargetSectionId.value = null
-
-  if (srcId === targetId) return
-
-  const rd = { ...props.resumeData }
-  let currentOrder: string[] = [...(rd.section_order || defaultSectionOrder)]
-
-  // 移出源项
-  currentOrder = currentOrder.filter((id) => id !== srcId)
-  const targetIdx = currentOrder.indexOf(targetId)
-
-  if (targetIdx !== -1) {
-    const insertIdx = pos === 'before' ? targetIdx : targetIdx + 1
-    currentOrder.splice(insertIdx, 0, srcId)
-  } else {
-    currentOrder.push(srcId)
-  }
-
-  rd.section_order = currentOrder
-  emit('update:resume-data', rd)
-  emit('change')
-}
-
 defineExpose({
   applyTagToBasics,
 })
@@ -492,7 +428,7 @@ defineExpose({
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
         <span class="font-bold text-slate-800">A4 交互式简历画布</span>
-        <span class="text-[10px] text-slate-400 font-normal">（支持标签拖入吸附、所见即所得改字、模块手柄调序）</span>
+        <span class="text-[10px] text-slate-400 font-normal">（支持基本信息标签拖入吸附、抬头原地改字）</span>
       </div>
 
       <!-- 缩放与配色快捷按钮 -->
@@ -704,47 +640,13 @@ defineExpose({
           </div>
         </header>
 
-        <!-- ================= 2~N 动态大模块流 (支持通过手柄 ⠿ 直接上下拖拽换序) ================= -->
+        <!-- ================= 2~N 动态大模块流 (按 section_order 呈现，纯净优雅排版) ================= -->
         <div class="resume-sections-flow space-y-4">
           <div
             v-for="secId in dynamicSections"
             :key="secId"
-            class="section-wrapper group/sec relative transition-all rounded-lg p-1"
-            :class="[
-              dropTargetSectionId === secId
-                ? (dropPosition === 'before' ? 'border-t-2 border-primary-500 pt-2' : 'border-b-2 border-primary-500 pb-2')
-                : ''
-            ]"
-            @dragover="onSectionDragOver($event, secId)"
-            @dragleave="onSectionDragLeave"
-            @drop="onSectionDrop($event, secId)"
+            class="section-wrapper"
           >
-            <!-- 模块悬浮手柄与操作栏 -->
-            <div
-              v-if="editable"
-              class="section-handle-bar absolute -top-3 right-2 hidden group-hover/sec:flex items-center gap-1.5 bg-white/95 backdrop-blur-xs border border-slate-200 shadow-md rounded-lg px-2 py-0.5 z-20 transition"
-            >
-              <!-- 拖动换序手柄 -->
-              <div
-                draggable="true"
-                class="cursor-grab active:cursor-grabbing text-slate-400 hover:text-primary-600 flex items-center gap-1 text-[11px] select-none pr-1 border-r border-slate-200"
-                title="按住上下拖动调整模块在简历中的出现顺序"
-                @dragstart="onSectionDragStart($event, secId)"
-              >
-                <span>⠿</span>
-                <span class="font-medium">按住拖动调序</span>
-              </div>
-
-              <!-- AI 优化本模块 -->
-              <button
-                class="text-[11px] text-primary-600 hover:underline flex items-center gap-0.5"
-                @click="emit('regenerate-section', secId)"
-              >
-                <span>✨</span>
-                <span>AI 优化</span>
-              </button>
-            </div>
-
             <!-- ---------------- 具体模块分支渲染 ---------------- -->
 
             <!-- 1. 教育背景 -->
