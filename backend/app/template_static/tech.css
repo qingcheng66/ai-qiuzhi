@@ -1,0 +1,7 @@
+.tech { font-family: "SF Mono", "Menlo", "PingFang SC", monospace; }
+.tech header h1 { letter-spacing: 1px; color: #312e81; }
+.tech section.block h2 { border-left: none; background: #eef2ff; padding: 6px 10px; color: #4338ca; }
+.tech .item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+.tech .item ul li { font-size: 12px; }
+.tech header .contact, .tech header .label { font-size: 12px; color: #6b7280; }
+.tech header { border-bottom: 2px solid #312e81; }

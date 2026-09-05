@@ -1,0 +1,6 @@
+.twocolumn header { border-bottom: none; }
+.twocolumn .grid { display: grid; grid-template-columns: 32% 68%; gap: 24px; }
+.twocolumn .side { background: #f3f4f6; padding: 16px; border-radius: 8px; }
+.twocolumn .side section.block h2 { border-left: none; color: #111827; border-bottom: 2px solid #111827; padding-bottom: 4px; }
+.twocolumn .main section.block h2 { color: #0f766e; border-left-color: #0f766e; }
+.twocolumn header h1 { color: #0f766e; }

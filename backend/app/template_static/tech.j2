@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { font-family: "SF Mono", "Menlo", "Consolas", "PingFang SC", monospace; color: #1e1b4b; margin: 0; padding: 36px 44px; background: #fff; line-height: 1.6; }
+header { border-bottom: 2px solid #312e81; padding-bottom: 14px; margin-bottom: 22px; }
+header h1 { letter-spacing: 1px; font-size: 24px; color: #312e81; margin: 0 0 6px; }
+header .label { color: #4338ca; font-size: 13px; margin: 4px 0; }
+header .contact { color: #4f46e5; font-size: 12px; margin: 4px 0; }
+header .summary { margin: 8px 0 0; color: #3730a3; font-size: 12.5px; }
+section.block { margin-bottom: 20px; page-break-inside: avoid; }
+section.block h2 { background: #eef2ff; padding: 6px 10px; color: #4338ca; font-size: 14px; letter-spacing: 2px; border-left: 4px solid #4338ca; }
+.item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+.item h3 { margin: 0 0 2px; font-size: 13.5px; }
+.item .date { color: #6d28d9; font-size: 11.5px; }
+.item p, .item ul { margin: 4px 0; font-size: 12.5px; }
+.item ul { padding-left: 18px; }
+.skill-line { margin: 4px 0; font-size: 12.5px; }
+.skill-tag { background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 3px; padding: 1px 6px; margin: 0 4px 0 0; display: inline-block; }
+pre.block { background: #1e1b4b; color: #e0e7ff; padding: 14px; border-radius: 8px; font-size: 12px; overflow-x: auto; }
+@media print { body { padding: 22px 28px; font-size: 11.5px; } section.block h2 { background: #f3f0ff; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>// {{ name }}</h1>
+  <p class="label">$ whoami  →  {{ label }}</p>
+  <p class="contact">$ contact →  {{ email }}{% if phone %} · {{ phone }}{% endif %}{% if location %} · {{ location }}{% endif %}</p>
+  {% if summary %}<p class="summary">$ bio     →  {{ summary }}</p>{% endif %}
+</header>
+
+{% if skills %}
+<section class="block">
+  <h2>$ skills</h2>
+  {% for s in skills %}
+  <div class="skill-line"><b>{{ s.name }}</b>:
+    {% for kw in s.keywords %}<span class="skill-tag">{{ kw }}</span>{% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if experience %}
+<section class="block">
+  <h2>$ experience</h2>
+  {% for e in experience %}
+  <div class="item">
+    <h3>{{ e.company }} · {{ e.role }}</h3>
+    <span class="date">[{{ e.startDate }} - {{ e.endDate }}]</span>
+    {% if e.highlights %}<ul>{% for h in e.highlights %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if projects %}
+<section class="block">
+  <h2>$ projects</h2>
+  {% for p in projects %}
+  <div class="item">
+    <h3>{{ p.name }}{% if p.description %} :: {{ p.description }}{% endif %}</h3>
+    <span class="date">[{{ p.startDate }} - {{ p.endDate }}]</span>
+    {% if p.highlights %}<ul>{% for h in p.highlights %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if highlights %}
+<section class="block">
+  <h2>$ highlights</h2>
+  {% for h in highlights %}
+  <div class="item">
+    <h3>{{ h.title }}{% if h.category %} <span class="date">[{{ h.category }}]</span>{% endif %}</h3>
+    <p>{{ h.content }}</p>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if education %}
+<section class="block">
+  <h2>$ education</h2>
+  {% for e in education %}
+  <div class="item">
+    <h3>{{ e.institution }} · {{ e.area }} · {{ e.studyType }}</h3>
+    <span class="date">[{{ e.startDate }} - {{ e.endDate }}]{% if e.gpa %} · GPA {{ e.gpa }}{% endif %}</span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+</body>
+</html>

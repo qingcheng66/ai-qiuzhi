@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ai-qiuzhi · 全系统原型全景看板 (All Pages Prototype)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: #0f172a;
+      color: #334155;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.5);
+    }
+    .preview-card {
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .preview-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+    }
+    .a4-paper-shadow {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-20 selection:bg-indigo-500 selection:text-white">
+
+  <!-- 顶部沉浸式导航控制台 -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-3 text-white shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white font-bold text-lg">
+          🤖
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-bold text-white tracking-wide">ai-qiuzhi · 全系统交互原型全景看板</h1>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              v2.0 · 9大核心页面
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">一张大图汇聚全部页面小图 · 点击任意卡片可放大沉浸式审查</p>
+        </div>
+      </div>
+
+      <!-- 分类筛选器 -->
+      <div class="flex items-center gap-1.5 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs">
+        <button class="filter-btn px-3 py-1.5 rounded-lg font-medium transition bg-indigo-600 text-white shadow-xs" data-filter="all">
+          全部页面 (9)
+        </button>
+        <button class="filter-btn px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-filter="resume">
+          简历生成流程 (4)
+        </button>
+        <button class="filter-btn px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-filter="kb-workspace">
+          知识库与看板 (2)
+        </button>
+        <button class="filter-btn px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-filter="detail-setting">
+          详情与设置 (3)
+        </button>
+      </div>
+
+      <!-- 操作与跳转 -->
+      <div class="flex items-center gap-3 text-xs">
+        <a
+          href="http://localhost:5173/#/generate"
+          target="_blank"
+          class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 transition font-medium"
+        >
+          <span>⚡ 打开本地运行中系统</span>
+          <span class="text-[10px]">↗</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 页面概览网格容器 -->
+  <main class="max-w-7xl mx-auto px-6 pt-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="prototype-grid">
+
+      <!-- ============================================================ -->
+      <!-- 页面 1: 简历生成向导 · 步骤一 (JD 输入与截屏 OCR) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="resume" data-target="p1">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/generate?step=1</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">向导 · 步骤 1</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">步骤一：目标 JD 输入与截屏 OCR</h3>
+            <p class="text-[11px] text-slate-400">支持直接粘贴岗位文字、上传截图 OCR 或直接创建通用母简历</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 模拟向导步骤条 -->
+          <div class="bg-white p-2.5 rounded-lg border border-slate-200 mb-2 flex items-center justify-between text-[11px]">
+            <span class="font-bold text-indigo-600 flex items-center gap-1">① 输入 JD</span>
+            <span class="text-slate-400">② 选择模板</span>
+            <span class="text-slate-400">③ 沉浸式微调</span>
+            <span class="text-slate-400">④ 关联岗位</span>
+            <span class="text-slate-400">⑤ 导出</span>
+          </div>
+          <!-- 模拟主体卡片 -->
+          <div class="bg-white p-3 rounded-lg border border-slate-200 flex-1 flex flex-col justify-between shadow-xs">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-700">粘贴目标岗位描述 (JD 全文)</span>
+                <span class="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  📷 支持截屏 OCR
+                </span>
+              </div>
+              <div class="w-full h-24 bg-slate-50 border border-slate-200 rounded p-2 text-[11px] text-slate-400 font-mono">
+                岗位：AI 全栈开发工程师<br/>
+                要求：熟练掌握 Vue3、LangGraph、DeepSeek...<br/>
+                <span class="text-indigo-400">（在此按 Cmd+V 或拖拽 JD 截图自动触发 OCR）</span>
+              </div>
+            </div>
+            <!-- 底部按钮栏 -->
+            <div class="pt-3 border-t border-slate-100 flex items-center justify-between mt-2">
+              <span class="text-[11px] text-indigo-600 font-medium hover:underline">
+                🩹 暂不输入 JD，直接创建通用母简历 →
+              </span>
+              <span class="px-3 py-1 bg-indigo-600 text-white text-[11px] font-bold rounded shadow-xs">
+                下一步：选择模板 →
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 2: 简历生成向导 · 步骤二 (模板画廊选择) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="resume" data-target="p2">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/generate?step=2</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">向导 · 步骤 2</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">步骤二：精选简历排版模板选择</h3>
+            <p class="text-[11px] text-slate-400">经典商务风、科技蓝、极简墨黑等多套排版实时选择</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 步骤条 -->
+          <div class="bg-white p-2.5 rounded-lg border border-slate-200 mb-2 flex items-center justify-between text-[11px]">
+            <span class="text-emerald-600 font-bold">✓ JD 就绪</span>
+            <span class="font-bold text-indigo-600 flex items-center gap-1">② 选择模板</span>
+            <span class="text-slate-400">③ 沉浸式微调</span>
+            <span class="text-slate-400">④ 关联岗位</span>
+            <span class="text-slate-400">⑤ 导出</span>
+          </div>
+          <!-- 模板网格卡片 -->
+          <div class="grid grid-cols-2 gap-2 flex-1">
+            <div class="bg-white p-2 rounded-lg border-2 border-indigo-600 shadow-sm relative flex flex-col justify-between">
+              <span class="absolute top-1 right-1 text-[9px] bg-indigo-600 text-white px-1 rounded">当前选中</span>
+              <div class="w-full h-16 bg-slate-50 border border-dashed border-slate-200 rounded flex flex-col p-1 gap-1">
+                <div class="h-2 w-1/3 bg-slate-300 rounded"></div>
+                <div class="h-1.5 w-full bg-slate-200 rounded"></div>
+                <div class="h-1.5 w-4/5 bg-slate-200 rounded"></div>
+                <div class="h-1.5 w-3/4 bg-slate-200 rounded"></div>
+              </div>
+              <span class="text-[11px] font-bold text-slate-800 mt-1">经典技术风模板</span>
+            </div>
+            <div class="bg-white p-2 rounded-lg border border-slate-200 hover:border-slate-300 flex flex-col justify-between">
+              <div class="w-full h-16 bg-slate-50 border border-slate-100 rounded flex flex-col p-1 gap-1">
+                <div class="h-2 w-1/2 bg-blue-300 rounded"></div>
+                <div class="h-1.5 w-full bg-slate-200 rounded"></div>
+                <div class="h-1.5 w-5/6 bg-slate-200 rounded"></div>
+              </div>
+              <span class="text-[11px] font-medium text-slate-600 mt-1">现代科技蓝模板</span>
+            </div>
+          </div>
+          <!-- 底部栏 -->
+          <div class="pt-2 flex justify-between items-center text-[11px] mt-2">
+            <span class="text-slate-400">← 返回修改 JD</span>
+            <span class="px-3 py-1 bg-indigo-600 text-white font-bold rounded shadow-xs">
+              下一步：进入沉浸式微调 →
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 3: 简历生成向导 · 步骤三 (三栏自由拖拽沉浸式微调) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border-2 border-indigo-500 rounded-2xl overflow-hidden flex flex-col shadow-2xl group cursor-pointer" data-category="resume" data-target="p3">
+        <!-- 窗口标题栏 -->
+        <div class="bg-indigo-950/80 px-4 py-2.5 flex items-center justify-between border-b border-indigo-800/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-indigo-300 ml-1">/generate?step=3 (核心工作台)</span>
+          </div>
+          <span class="text-[11px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
+            ★ 最新完成拖拽
+          </span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">步骤三：沉浸式三栏编辑微调工作台</h3>
+            <p class="text-[11px] text-slate-400">模块编排 + 表单编辑 + 实时 A4 画布 + 左右自由拖拽</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 (三栏结构) -->
+        <div class="p-2 bg-slate-200 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 模拟顶栏收缩控制 -->
+          <div class="bg-white px-2 py-1 rounded border border-slate-300 mb-1.5 flex items-center justify-between text-[10px]">
+            <div class="flex items-center gap-1.5">
+              <span class="bg-slate-100 px-1 py-0.5 rounded text-slate-600">▲ 收起顶栏</span>
+              <span class="bg-slate-100 px-1 py-0.5 rounded text-slate-600">« 收起左栏</span>
+              <span class="text-emerald-600 font-bold">● 已自动保存</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="bg-indigo-50 text-indigo-700 font-bold px-1.5 py-0.5 rounded border border-indigo-200">
+                🎯 挂载 JD / 截图 OCR
+              </span>
+            </div>
+          </div>
+          <!-- 核心三栏 + 双分割条模拟 -->
+          <div class="flex-1 flex items-stretch gap-1 overflow-hidden">
+            <!-- 左栏：模块编排 (25%) -->
+            <div class="w-1/4 bg-white rounded border border-slate-300 p-1.5 flex flex-col justify-between text-[9px]">
+              <div>
+                <span class="font-bold text-slate-700 block pb-1 border-b">📐 模块编排</span>
+                <div class="space-y-1 mt-1">
+                  <div class="bg-indigo-600 text-white px-1 py-0.5 rounded flex justify-between items-center">
+                    <span>👤 基本资料</span>
+                    <span>👁 ↑ 🗑</span>
+                  </div>
+                  <div class="bg-slate-50 text-slate-700 px-1 py-0.5 rounded flex justify-between items-center border">
+                    <span>⚡ 专业技能</span>
+                    <span>👁 ↑ 🗑</span>
+                  </div>
+                  <div class="bg-slate-50 text-slate-700 px-1 py-0.5 rounded flex justify-between items-center border">
+                    <span>💼 工作经历</span>
+                    <span>👁 ↑ 🗑</span>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-indigo-50 border border-dashed border-indigo-300 text-indigo-600 text-center py-0.5 rounded">
+                ＋ 添加模块
+              </div>
+            </div>
+
+            <!-- 分割条 1 -->
+            <div class="w-1 bg-slate-300 hover:bg-indigo-500 cursor-col-resize flex items-center justify-center rounded">
+              <span class="w-0.5 h-4 bg-slate-500 rounded-full"></span>
+            </div>
+
+            <!-- 中栏：表单编辑 (40%) -->
+            <div class="w-2/5 bg-white rounded border border-slate-300 p-1.5 flex flex-col text-[9px] justify-between">
+              <div>
+                <div class="flex justify-between items-center pb-1 border-b">
+                  <span class="font-bold text-slate-800">👤 基本资料</span>
+                  <span class="text-indigo-600 font-bold">✨ AI 优化</span>
+                </div>
+                <div class="space-y-1 mt-1">
+                  <div class="h-4 bg-slate-100 border rounded px-1 flex items-center text-slate-500">姓名: 刘仁晓君</div>
+                  <div class="h-4 bg-slate-100 border rounded px-1 flex items-center text-slate-500">意向: AI Agent 开发</div>
+                  <div class="h-4 bg-slate-100 border rounded px-1 flex items-center text-slate-500">邮箱: 1120835055@qq...</div>
+                </div>
+              </div>
+              <div class="text-[8px] text-slate-400 bg-slate-50 p-1 rounded">
+                ⚡ 输入即时 0ms 响应右侧纸质画布
+              </div>
+            </div>
+
+            <!-- 分割条 2 -->
+            <div class="w-1 bg-slate-300 hover:bg-indigo-500 cursor-col-resize flex items-center justify-center rounded">
+              <span class="w-0.5 h-4 bg-slate-500 rounded-full"></span>
+            </div>
+
+            <!-- 右栏：实时 A4 纸张画布 (35%) -->
+            <div class="flex-1 bg-slate-200 rounded border border-slate-300 p-1.5 flex flex-col items-center justify-center relative overflow-hidden">
+              <div class="absolute top-1 left-1 right-1 flex justify-between items-center text-[8px] bg-white/90 px-1 py-0.5 rounded">
+                <span class="text-indigo-600 font-bold">⚡ 实时纸质 (0ms)</span>
+                <span class="bg-indigo-100 text-indigo-700 px-1 rounded">💾 导出 PDF</span>
+              </div>
+              <!-- 模拟 A4 纸张 -->
+              <div class="w-24 h-32 bg-white a4-paper-shadow rounded-xs p-1.5 flex flex-col gap-1 mt-3 scale-95 origin-top">
+                <div class="h-2 w-1/2 bg-slate-800 rounded-xs"></div>
+                <div class="h-0.5 w-full bg-slate-200"></div>
+                <div class="h-1 w-1/3 bg-indigo-500 rounded-xs mt-1"></div>
+                <div class="h-1 w-full bg-slate-200 rounded-xs"></div>
+                <div class="h-1 w-4/5 bg-slate-200 rounded-xs"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 4: 简历生成向导 · 步骤四与五 (关联岗位 & 导出中心) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="resume" data-target="p4">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/generate?step=4-5</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">向导 · 步骤 4/5</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">步骤四/五：岗位关联与导出交付</h3>
+            <p class="text-[11px] text-slate-400">一键绑定到求职工作台公司卡片，高精度导出 PDF/Markdown</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <div class="space-y-2">
+            <!-- 绑定目标公司 -->
+            <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+              <span class="text-[11px] font-bold text-slate-700 block mb-1">🔗 关联到求职工作台</span>
+              <div class="flex items-center gap-2 text-[10px]">
+                <span class="p-1 bg-slate-100 rounded border">🏢 高德地图</span>
+                <span class="p-1 bg-slate-100 rounded border">💼 前端专家</span>
+                <span class="text-emerald-600 font-bold">✓ 状态：投递中</span>
+              </div>
+            </div>
+            <!-- 导出多格式 -->
+            <div class="bg-white p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+              <span class="text-[11px] font-bold text-slate-700 block">💾 格式交付中心</span>
+              <div class="grid grid-cols-2 gap-1.5 text-[10px]">
+                <button class="p-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold rounded flex items-center justify-center gap-1">
+                  📄 下载高清 PDF
+                </button>
+                <button class="p-1.5 bg-slate-50 border border-slate-200 text-slate-700 font-medium rounded flex items-center justify-center gap-1">
+                  📝 导出 Markdown
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="pt-2 text-[10px] text-center text-slate-400">
+            简历已存档至系统数据库，随时可在求职工作台调出继续迭代
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 5: 个人求职知识库 (Career Knowledge Base) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="kb-workspace" data-target="p5">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/knowledge</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">核心知识底座</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">个人求职知识库（经历/项目/资产沉淀）</h3>
+            <p class="text-[11px] text-slate-400">个人主数据底座，支持旧简历 PDF 解析与结构化经历沉淀</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 分类标签 -->
+          <div class="flex items-center gap-1 text-[10px] pb-1.5 border-b border-slate-200">
+            <span class="bg-indigo-600 text-white px-2 py-0.5 rounded font-bold">分类资产库</span>
+            <span class="bg-white border text-slate-600 px-2 py-0.5 rounded">简历文档导入</span>
+            <span class="bg-white border text-slate-600 px-2 py-0.5 rounded">结构化概况</span>
+          </div>
+          <!-- 经历卡片列表 -->
+          <div class="space-y-1.5 flex-1 pt-2">
+            <div class="bg-white p-2 rounded border border-slate-200 text-[10px]">
+              <div class="flex justify-between font-bold text-slate-800">
+                <span>🚀 AI Agent 智能求职助手项目</span>
+                <span class="text-indigo-600">复制引用</span>
+              </div>
+              <p class="text-slate-500 text-[9px] mt-0.5">Vue3 + FastAPI + LangGraph 实现 JD OCR 结构化与多模板秒级渲染...</p>
+            </div>
+            <div class="bg-white p-2 rounded border border-slate-200 text-[10px]">
+              <div class="flex justify-between font-bold text-slate-800">
+                <span>💼 某互联网科技公司 · 前端开发</span>
+                <span class="text-slate-400">2023 - 2025</span>
+              </div>
+              <p class="text-slate-500 text-[9px] mt-0.5">负责跨端应用核心框架开发与 Web 性能调优，首屏加载提升 40%...</p>
+            </div>
+          </div>
+          <!-- 底部导入 -->
+          <div class="pt-2 text-[10px] flex justify-between items-center">
+            <span class="text-indigo-600 font-bold cursor-pointer">＋ 新建知识卡片</span>
+            <span class="text-slate-400">支持一键同步至生成向导</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 6: 求职工作台 (Workspace 投递管理看板) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="kb-workspace" data-target="p6">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/workspace</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">投递追踪看板</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">求职工作台（投递看板与版本管理）</h3>
+            <p class="text-[11px] text-slate-400">按公司与岗位追踪投递状态，AI 模拟面试押题</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 (看板列) -->
+        <div class="p-2 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 统计摘要 -->
+          <div class="grid grid-cols-4 gap-1 mb-2 text-center text-[9px]">
+            <div class="bg-white p-1 rounded border"><span class="block font-bold text-slate-800 text-xs">5</span>目标公司</div>
+            <div class="bg-white p-1 rounded border"><span class="block font-bold text-indigo-600 text-xs">8</span>投递岗位</div>
+            <div class="bg-white p-1 rounded border"><span class="block font-bold text-amber-600 text-xs">3</span>面试中</div>
+            <div class="bg-white p-1 rounded border"><span class="block font-bold text-emerald-600 text-xs">1</span>获得Offer</div>
+          </div>
+          <!-- 投递看板 3 列模拟 -->
+          <div class="grid grid-cols-3 gap-1 flex-1">
+            <div class="bg-slate-200/80 rounded p-1 flex flex-col gap-1">
+              <span class="text-[9px] font-bold text-slate-600">投递中 (3)</span>
+              <div class="bg-white p-1 rounded border text-[8px]">
+                <div class="font-bold">字节跳动</div>
+                <div class="text-slate-400">AI 全栈工程</div>
+              </div>
+              <div class="bg-white p-1 rounded border text-[8px]">
+                <div class="font-bold">腾讯科技</div>
+                <div class="text-slate-400">前端专家</div>
+              </div>
+            </div>
+            <div class="bg-amber-100/80 rounded p-1 flex flex-col gap-1">
+              <span class="text-[9px] font-bold text-amber-700">面试中 (2)</span>
+              <div class="bg-white p-1 rounded border border-amber-200 text-[8px]">
+                <div class="font-bold text-amber-900">阿里巴巴</div>
+                <div class="text-amber-600">技术二面 (周五)</div>
+              </div>
+            </div>
+            <div class="bg-emerald-100/80 rounded p-1 flex flex-col gap-1">
+              <span class="text-[9px] font-bold text-emerald-700">已获 Offer (1)</span>
+              <div class="bg-white p-1 rounded border border-emerald-200 text-[8px]">
+                <div class="font-bold text-emerald-900">某独角兽 AI</div>
+                <div class="text-emerald-600">已发意向书</div>
+              </div>
+            </div>
+          </div>
+          <!-- 底部操作 -->
+          <div class="pt-1.5 flex justify-between items-center text-[9px]">
+            <span class="text-indigo-600 font-bold">＋ 添加目标企业</span>
+            <span class="text-slate-500">🎯 支持 AI 面试押题预测</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 7: 公司与岗位情报详情页 (Company & Position Detail) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="detail-setting" data-target="p7">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/positions/:id</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">情报详情</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">公司背景与目标岗位详情情报</h3>
+            <p class="text-[11px] text-slate-400">企业背景透视、岗位核心要求、面试题库沉淀记事本</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 公司 Head -->
+          <div class="bg-white p-2 rounded border border-slate-200 flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-slate-800">阿里巴巴 · 智能信息事业群</span>
+              <span class="text-[10px] text-slate-400 block">高德地图团队 · 杭州 / 北京</span>
+            </div>
+            <span class="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] rounded font-bold">
+              资深前端专家
+            </span>
+          </div>
+          <!-- 岗位要求比对 -->
+          <div class="bg-white p-2 rounded border border-slate-200 mt-1.5 flex-1 flex flex-col text-[10px]">
+            <span class="font-bold text-slate-700 mb-1">📋 岗位核心要求 (JD 分析)</span>
+            <div class="flex flex-wrap gap-1 mb-1">
+              <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 rounded text-[9px]">✓ Vue3 / TS</span>
+              <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1 rounded text-[9px]">✓ 性能优化</span>
+              <span class="bg-rose-50 text-rose-700 border border-rose-200 px-1 rounded text-[9px]">! WebGL 架构 (需补充)</span>
+            </div>
+            <span class="font-bold text-slate-700 mt-1 mb-0.5">📝 面试题库与复盘笔记</span>
+            <div class="bg-slate-50 p-1 rounded text-[9px] text-slate-500 font-mono">
+              Q1: 大规模地图数据渲染与前端渲染流水线调度？<br/>
+              Q2: 针对低端机设备的 DOM 与内存优化经验？
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 8: 简历模板管理中心 (Templates) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="detail-setting" data-target="p8">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/templates</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">排版引擎</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">简历模板管理中心（HTML/CSS 模板）</h3>
+            <p class="text-[11px] text-slate-400">浏览多套经典简历模板代码，支持导入自定义模板</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <!-- 模板列表浏览 -->
+          <div class="space-y-1.5 flex-1">
+            <div class="bg-white p-2 rounded border border-slate-200 flex items-center justify-between text-[10px]">
+              <div>
+                <span class="font-bold text-slate-800">经典黑白排版模板 (Classic)</span>
+                <span class="text-slate-400 block text-[9px]">高通量求职 HR 最爱、ATS 友好排版</span>
+              </div>
+              <span class="text-indigo-600 font-bold">默认启用</span>
+            </div>
+            <div class="bg-white p-2 rounded border border-slate-200 flex items-center justify-between text-[10px]">
+              <div>
+                <span class="font-bold text-slate-800">现代极客蓝科技风 (Modern)</span>
+                <span class="text-slate-400 block text-[9px]">适合互联网研发与大模型算法工程师</span>
+              </div>
+              <span class="text-slate-500">预览效果</span>
+            </div>
+            <div class="bg-white p-2 rounded border border-slate-200 flex items-center justify-between text-[10px]">
+              <div>
+                <span class="font-bold text-slate-800">单页高密度学术紧凑版 (Compact)</span>
+                <span class="text-slate-400 block text-[9px]">自动将超量履历压缩在 1 页 A4 纸内</span>
+              </div>
+              <span class="text-slate-500">预览效果</span>
+            </div>
+          </div>
+          <!-- 底部导入 -->
+          <div class="pt-2 text-[10px] flex justify-between items-center">
+            <span class="text-indigo-600 font-bold cursor-pointer">＋ 导入自定义 HTML 模板</span>
+            <span class="text-slate-400">支持 Jinja2 / Vue 语法</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
+      <!-- 页面 9: 系统设置与模型配置中心 (Settings) -->
+      <!-- ============================================================ -->
+      <div class="preview-card bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col shadow-xl group cursor-pointer" data-category="detail-setting" data-target="p9">
+        <!-- 窗口标题栏 -->
+        <div class="bg-slate-800/90 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="text-xs font-mono text-slate-400 ml-1">/settings</span>
+          </div>
+          <span class="text-[11px] font-medium text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">系统配置</span>
+        </div>
+        <!-- 页面卡片标题 -->
+        <div class="px-4 py-3 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">系统设置与 AI 模型 / OCR 接入</h3>
+            <p class="text-[11px] text-slate-400">配置 DeepSeek / OpenRouter / 本地 PaddleOCR / 腾讯云</p>
+          </div>
+          <span class="text-xs text-indigo-400 group-hover:text-indigo-300 font-medium">🔍 放大查看</span>
+        </div>
+        <!-- 页面 UI 微缩模拟区 -->
+        <div class="p-3 bg-slate-100 flex-1 flex flex-col justify-between min-h-[300px]">
+          <div class="space-y-2 text-[10px]">
+            <!-- 大模型配置 -->
+            <div class="bg-white p-2 rounded border border-slate-200 space-y-1">
+              <span class="font-bold text-slate-800 block">🤖 大语言模型 (LLM) 提供商</span>
+              <div class="flex items-center justify-between bg-slate-50 p-1 rounded">
+                <span class="text-slate-600">DeepSeek API Key</span>
+                <span class="text-emerald-600 font-bold">● 已连接生效</span>
+              </div>
+              <div class="flex items-center justify-between bg-slate-50 p-1 rounded">
+                <span class="text-slate-600">OpenRouter (备用)</span>
+                <span class="text-slate-400">未配置</span>
+              </div>
+            </div>
+            <!-- OCR 配置 -->
+            <div class="bg-white p-2 rounded border border-slate-200 space-y-1">
+              <span class="font-bold text-slate-800 block">📷 JD OCR 识别服务</span>
+              <div class="flex items-center justify-between bg-slate-50 p-1 rounded">
+                <span class="text-slate-600">PaddleOCR (本地 Python 3.12 独立进程)</span>
+                <span class="text-indigo-600 font-bold">优先使用</span>
+              </div>
+              <div class="flex items-center justify-between bg-slate-50 p-1 rounded">
+                <span class="text-slate-600">百度 / 腾讯云 OCR API</span>
+                <span class="text-slate-400">云端备用</span>
+              </div>
+            </div>
+          </div>
+          <!-- 底部版本信息 -->
+          <div class="pt-2 text-[9px] text-slate-400 text-center border-t border-slate-200">
+            ai-qiuzhi v1.0.0 · FastAPI + Vue3 + SQLite 驱动
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- 模态框：单页高清沉浸式放大查看 (Modal) -->
+  <!-- ============================================================ -->
+  <div id="zoom-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 sm:p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- 模态框顶部栏 -->
+      <div class="px-6 py-4 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <div>
+            <h2 id="modal-title" class="text-base font-bold text-white">页面高清大图原型审查</h2>
+            <p id="modal-subtitle" class="text-xs text-slate-400">完整架构与交互功能点分析</p>
+          </div>
+        </div>
+        <button id="close-modal" class="text-slate-400 hover:text-white text-xl p-2 rounded-lg hover:bg-slate-800 transition">
+          ✕
+        </button>
+      </div>
+      <!-- 模态框内容区 -->
+      <div id="modal-body" class="p-6 overflow-y-auto flex-1 bg-slate-950 text-slate-200 space-y-4">
+        <!-- 动态注入详情 -->
+      </div>
+      <!-- 模态框底部栏 -->
+      <div class="px-6 py-3 bg-slate-850 border-t border-slate-800 flex items-center justify-between text-xs">
+        <span class="text-slate-400">提示：按 ESC 或点击右上角 ✕ 退出放大视图</span>
+        <button id="modal-action-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-sm transition">
+          在本地浏览器中直接访问此页面
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 交互脚本 -->
+  <script>
+    // 1. 分类筛选
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const cards = document.querySelectorAll('.preview-card');
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => {
+          b.classList.remove('bg-indigo-600', 'text-white', 'shadow-xs');
+          b.classList.add('text-slate-400');
+        });
+        btn.classList.remove('text-slate-400');
+        btn.classList.add('bg-indigo-600', 'text-white', 'shadow-xs');
+
+        const filter = btn.dataset.filter;
+        cards.forEach(card => {
+          if (filter === 'all' || card.dataset.category === filter) {
+            card.style.display = 'flex';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      });
+    });
+
+    // 2. 模态框放大详情定义
+    const pageDetails = {
+      p1: {
+        title: '简历生成向导 · 步骤一：输入目标岗位 JD 与截屏 OCR',
+        subtitle: '路由：http://localhost:5173/#/generate?step=1',
+        url: 'http://localhost:5173/#/generate',
+        content: `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <h4 class="font-bold text-indigo-400 mb-2">🎯 核心功能点</h4>
+              <ul class="text-xs space-y-2 text-slate-300">
+                <li>• <b>多模态输入</b>：支持粘贴纯文本、上传本地图片、从求职软件（Boss/拉勾）直接截屏并 Cmd+V 粘贴。</li>
+                <li>• <b>智能 OCR 流水线</b>：后端接入 PaddleOCR / 腾讯云 OCR，提取文字后自动剔除招聘 APP 水印和噪音按钮。</li>
+                <li>• <b>通用母简历免配通道</b>：提供「暂不输入 JD，直接创建通用母简历」快速通道，适合先完善履历的用户。</li>
+              </ul>
+            </div>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <h4 class="font-bold text-emerald-400 mb-2">💡 技术架构与流转</h4>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                前端接收输入后，向 <code>/api/jd/structurize</code> 发起异步请求，后台 LLM 将岗位提取为 <code>title</code>、<code>skills_required</code>、<code>responsibilities</code> 结构体，作为后续步骤的匹配核心。
+              </p>
+            </div>
+          </div>
+        `
+      },
+      p2: {
+        title: '简历生成向导 · 步骤二：精选排版模板选择',
+        subtitle: '路由：http://localhost:5173/#/generate?step=2',
+        url: 'http://localhost:5173/#/generate',
+        content: `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <h4 class="font-bold text-indigo-400 mb-2">🎨 模板矩阵</h4>
+              <ul class="text-xs space-y-2 text-slate-300">
+                <li>• <b>经典技术风</b>：符合各大中大型大厂 HR 审阅习惯，结构规整，信息密度高。</li>
+                <li>• <b>现代科技蓝</b>：侧重高亮个人核心亮点与量化成果，适合技术专家与架构师。</li>
+                <li>• <b>单页高密度紧凑版</b>：针对经历丰富的高年限开发者，智能压缩间距保证一页排布。</li>
+              </ul>
+            </div>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <h4 class="font-bold text-emerald-400 mb-2">⚡ 切换体验</h4>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                支持在向导步骤二直接预览各套模板的样例效果，选中后携带 <code>template_id</code> 进入步骤三沉浸式工作台。
+              </p>
+            </div>
+          </div>
+        `
+      },
+      p3: {
+        title: '简历生成向导 · 步骤三：Magic-Resume 沉浸式三栏微调工作台',
+        subtitle: '路由：http://localhost:5173/#/generate?step=3',
+        url: 'http://localhost:5173/#/generate',
+        content: `
+          <div class="space-y-4">
+            <div class="bg-indigo-950/40 p-4 rounded-xl border border-indigo-800/60">
+              <h4 class="font-bold text-indigo-300 mb-2">⭐ 全系统最具价值的核心工作台</h4>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                对标 Magic-Resume，实现模块管理、AI 表单优化、真实 A4 纸质画布三栏并立，输入即刻 0ms 实时响应渲染。
+              </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div class="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span class="font-bold text-white block mb-1">1. 左栏 (SidePanel)</span>
+                <p class="text-slate-400">模块上下排序、显隐切换、删除基础模块、添加自定义模块、4套全局主题色切换、支持一键收起。</p>
+              </div>
+              <div class="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span class="font-bold text-white block mb-1">2. 中栏 (EditPanel)</span>
+                <p class="text-slate-400">模块化精细输入表单、AI 一键优化单模块、AI 针对 JD 润色、自动防抖保存到后端数据库。</p>
+              </div>
+              <div class="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <span class="font-bold text-white block mb-1">3. 右栏 (PreviewPanel)</span>
+                <p class="text-slate-400">0ms 纯响应式纸质 A4 画布、一页自适应微调压缩、模板原件渲染切换、一键高清 PDF 导出。</p>
+              </div>
+            </div>
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <h4 class="font-bold text-emerald-400 mb-2">↔️ 自由左右拖拽宽度系统</h4>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                三栏之间配备双分割条（Splitters），支持鼠标按住任意左右拖动调节视口宽度；双击分割条手柄可瞬间恢复初始黄金比例；拖拽结果持久化记忆在 localStorage。
+              </p>
+            </div>
+          </div>
+        `
+      },
+      p4: {
+        title: '简历生成向导 · 步骤四与五：岗位关联与导出交付',
+        subtitle: '路由：http://localhost:5173/#/generate?step=4',
+        url: 'http://localhost:5173/#/generate',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">🔗 岗位求职关联闭环</h4>
+            <p class="text-slate-300">生成的简历版本可直接关联绑定到求职工作台的目标公司与目标岗位，形成“一份岗位定制一份简历”的一对一档案体系。</p>
+            <h4 class="font-bold text-emerald-400">💾 多格式导出</h4>
+            <p class="text-slate-300">支持基于浏览器打印引擎的高清矢量 PDF 导出，以及保留完整排版层级的 Markdown 源码下载。</p>
+          </div>
+        `
+      },
+      p5: {
+        title: '个人求职知识库 (Career Knowledge Base)',
+        subtitle: '路由：http://localhost:5173/#/knowledge',
+        url: 'http://localhost:5173/#/knowledge',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">📦 资产分类资产库与经历沉淀</h4>
+            <p class="text-slate-300">汇聚个人所有维度的求职资产：基本信息、教育经历、技能清单、工作经历、项目经历库、个人亮点库。支持分类打标、一键复制内容片段到剪贴板以供简历粘贴使用。</p>
+            <h4 class="font-bold text-emerald-400">📄 简历文档导入解析</h4>
+            <p class="text-slate-300">支持上传既往 PDF / DOCX 简历，后端 MinerU / PaddleOCR 解析并由大模型自动提取结构化经历填入知识库。</p>
+          </div>
+        `
+      },
+      p6: {
+        title: '求职工作台 (Workspace 投递管理看板)',
+        subtitle: '路由：http://localhost:5173/#/workspace',
+        url: 'http://localhost:5173/#/workspace',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">📊 10 阶段求职状态机看板</h4>
+            <p class="text-slate-300">按公司和岗位流转求职状态：愿望清单、已投递、初筛通过、技术一面、技术二面、HR面、已获 Offer、已结束。全流程可视化掌控春招/秋招求职进度。</p>
+            <h4 class="font-bold text-emerald-400">🎯 AI 模拟面试押题</h4>
+            <p class="text-slate-300">基于关联岗位的 JD 与用户的定制简历，AI 自动预测可能考察的八股文、项目深挖问题与 STAR 回答建议。</p>
+          </div>
+        `
+      },
+      p7: {
+        title: '目标公司与岗位详情情报 (Company & Position Detail)',
+        subtitle: '路由：http://localhost:5173/#/companies/:id & /positions/:id',
+        url: 'http://localhost:5173/#/workspace',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">🏢 目标企业图谱与情报</h4>
+            <p class="text-slate-300">记录公司的业务架构、融资规模、所属行业、官方主页及关联的全部应聘岗位。</p>
+            <h4 class="font-bold text-emerald-400">📝 岗位 JD 深度拆解与面经复盘</h4>
+            <p class="text-slate-300">完整记录该岗位的职责与任职资格，内置复盘记事本用于记录各轮面试官提问、回答亮点与待提升点。</p>
+          </div>
+        `
+      },
+      p8: {
+        title: '简历模板管理中心 (Resume Templates)',
+        subtitle: '路由：http://localhost:5173/#/templates',
+        url: 'http://localhost:5173/#/templates',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">🎨 模板管理与扩展</h4>
+            <p class="text-slate-300">集中展示系统内置的所有简历排版模板，支持直接编辑模板源代码（HTML/CSS）或导入用户自定义专属模板，支持一键实时预览渲染结果。</p>
+          </div>
+        `
+      },
+      p9: {
+        title: '系统设置与 AI 模型 / OCR 接入 (Settings)',
+        subtitle: '路由：http://localhost:5173/#/settings',
+        url: 'http://localhost:5173/#/settings',
+        content: `
+          <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 text-xs space-y-3">
+            <h4 class="font-bold text-indigo-400">🤖 大模型服务配置</h4>
+            <p class="text-slate-300">支持 DeepSeek（推荐）、OpenRouter、OpenAI 等主流大模型 API Key 快速配置与热加载，提供未配 Key 时的智能 Mock 全链路调试兜底。</p>
+            <h4 class="font-bold text-emerald-400">📷 OCR 识别引擎多级降级机制</h4>
+            <p class="text-slate-300">PaddleOCR (本地独立进程) > MinerU (PDF文档解析) > 百度 OCR > 腾讯 OCR > 前端直接粘贴降级，保障各种环境下求职流程不中断。</p>
+          </div>
+        `
+      }
+    };
+
+    // 3. 模态框打开与关闭
+    const modal = document.getElementById('zoom-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalSubtitle = document.getElementById('modal-subtitle');
+    const modalBody = document.getElementById('modal-body');
+    const modalActionBtn = document.getElementById('modal-action-btn');
+    const closeModalBtn = document.getElementById('close-modal');
+
+    document.querySelectorAll('[data-target]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const targetId = el.dataset.target;
+        const info = pageDetails[targetId];
+        if (info) {
+          modalTitle.textContent = info.title;
+          modalSubtitle.textContent = info.subtitle;
+          modalBody.innerHTML = info.content;
+          modalActionBtn.onclick = () => window.open(info.url, '_blank');
+          modal.classList.remove('hidden');
+        }
+      });
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        modal.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

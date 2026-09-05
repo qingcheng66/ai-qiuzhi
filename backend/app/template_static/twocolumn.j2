@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; margin: 0; padding: 40px 44px; background: #fff; line-height: 1.6; }
+.resume { display: grid; grid-template-columns: 32% 68%; gap: 28px; }
+header h1 { font-size: 24px; margin: 0 0 4px; color: #0f766e; }
+header .label { color: #0f766e; font-weight: 500; margin: 4px 0; }
+header .contact { color: #4b5563; font-size: 12px; margin: 4px 0; line-height: 1.8; }
+.side { background: #f3f4f6; padding: 18px 16px; border-radius: 8px; }
+.side section.block h2 { border-left: none; color: #111827; border-bottom: 2px solid #d1d5db; padding-bottom: 4px; }
+.main section.block h2 { color: #0f766e; border-left-color: #0f766e; }
+section.block { margin-bottom: 16px; page-break-inside: avoid; }
+section.block h2 { font-size: 15px; border-left: 4px solid #9ca3af; padding-left: 8px; margin: 12px 0 8px; }
+.item { margin-bottom: 10px; }
+.item h3 { margin: 0; font-size: 13.5px; }
+.item .date { color: #6b7280; font-size: 11.5px; }
+.item ul { padding-left: 16px; margin: 4px 0; font-size: 12.5px; }
+.item p { margin: 3px 0; font-size: 12.5px; }
+.contact-line { font-size: 11.5px; color: #374151; word-break: break-all; }
+@media print { body { padding: 24px 30px; font-size: 12px; } .side { background: #f0fdf4; } }
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="side">
+    <header>
+      <h1>{{ name }}</h1>
+      <p class="label">{{ label }}</p>
+      <p class="contact">
+        {% if email %}<div class="contact-line">✉ {{ email }}</div>{% endif %}
+        {% if phone %}<div class="contact-line">☎ {{ phone }}</div>{% endif %}
+        {% if location %}<div class="contact-line">⌂ {{ location }}</div>{% endif %}
+        {% if github %}<div class="contact-line">GitHub: {{ github }}</div>{% endif %}
+        {% if blog %}<div class="contact-line">Blog: {{ blog }}</div>{% endif %}
+      </p>
+    </header>
+    {% if summary %}<p style="font-size:12px;color:#374151">{{ summary }}</p>{% endif %}
+
+    {% if skills %}
+    <section class="block">
+      <h2>专业技能</h2>
+      {% for s in skills %}
+      <div class="item">
+        <h3>{{ s.name }}</h3>
+        <p>{{ s.keywords | join(" / ") }}</p>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if education %}
+    <section class="block">
+      <h2>教育背景</h2>
+      {% for e in education %}
+      <div class="item">
+        <h3>{{ e.institution }}</h3>
+        <p>{{ e.area }} · {{ e.studyType }}{% if e.gpa %} · GPA {{ e.gpa }}{% endif %}</p>
+        <span class="date">{{ e.startDate }} - {{ e.endDate }}</span>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+
+  <div class="main">
+    {% if experience %}
+    <section class="block">
+      <h2>工作经历</h2>
+      {% for e in experience %}
+      <div class="item">
+        <h3>{{ e.company }}{% if e.role %} · {{ e.role }}{% endif %}</h3>
+        <span class="date">{{ e.startDate }} - {{ e.endDate }}</span>
+        {% if e.highlights %}<ul>{% for h in e.highlights %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if projects %}
+    <section class="block">
+      <h2>项目经历</h2>
+      {% for p in projects %}
+      <div class="item">
+        <h3>{{ p.name }}{% if p.description %} — {{ p.description }}{% endif %}</h3>
+        <span class="date">{{ p.startDate }} - {{ p.endDate }}</span>
+        {% if p.highlights %}<ul>{% for h in p.highlights %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    {% if highlights %}
+    <section class="block">
+      <h2>技术亮点</h2>
+      {% for h in highlights %}
+      <div class="item">
+        <h3>{{ h.title }}{% if h.category %} <span class="date">[{{ h.category }}]</span>{% endif %}</h3>
+        <p>{{ h.content }}</p>
+      </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
